@@ -1,0 +1,213 @@
+"""In-process job scheduler — replaces Celery + Redis.
+
+Uses APScheduler's BackgroundScheduler with a thread pool executor.
+Discovery and apply tasks use asyncio.run() internally, so they run in
+threads (not on the FastAPI event loop). Lightweight tasks (notifications,
+health checks) run in threads too for simplicity.
+
+Started/stopped via the FastAPI lifespan in main.py.
+"""
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+from loguru import logger
+from config import settings
+
+
+scheduler = BackgroundScheduler(
+    timezone="Asia/Kolkata",
+    job_defaults={
+        "coalesce": True,
+        "max_instances": 1,
+        "misfire_grace_time": 300,
+    },
+)
+
+
+def _run_discovery_all_users():
+    """Discover jobs for every user with auto_apply_enabled."""
+    from database import get_supabase_admin
+    from workers.job_discovery import run_discovery_for_user
+
+    try:
+        db = get_supabase_admin()
+        users = db.table("users").select("id, preferred_locations").execute()
+        for user in (users.data or []):
+            user_id = user["id"]
+            locations = user.get("preferred_locations") or ["India"]
+            region = "india" if any("india" in loc.lower() for loc in locations) else "global"
+            try:
+                run_discovery_for_user(user_id, region)
+            except Exception as e:
+                logger.error(f"Scheduled discovery failed for {user_id}: {e}")
+    except Exception as e:
+        logger.error(f"Scheduled discovery-all failed: {e}")
+
+
+def _process_apply_queue():
+    """Drain the pending apply queue with rate-limited delays between applications.
+
+    Groups items by (user, platform), checks daily caps, and adds randomized
+    human-like delays between submissions to avoid triggering anti-bot detection.
+    Also re-queues rate_limited items whose cap has reset (new day).
+    """
+    import time
+    from database import get_supabase_admin
+    from workers.application_bot import apply_single_job
+    from services.rate_limiter import rate_limiter
+
+    try:
+        db = get_supabase_admin()
+
+        # Re-queue rate_limited items (daily cap may have reset)
+        try:
+            db.table("apply_queue").update(
+                {"status": "pending", "error_msg": None}
+            ).eq("status", "rate_limited").execute()
+        except Exception:
+            pass
+
+        pending = (
+            db.table("apply_queue")
+            .select("id, user_id, application_id")
+            .eq("status", "pending")
+            .order("priority")
+            .order("created_at")
+            .limit(20)
+            .execute()
+        )
+        items = pending.data or []
+        if not items:
+            return
+
+        # Look up platform for each item to enforce per-platform limits
+        app_ids = [item["application_id"] for item in items]
+        apps = (
+            db.table("application_details")
+            .select("id, source_platform")
+            .in_("id", app_ids)
+            .execute()
+        )
+        platform_map = {a["id"]: a.get("source_platform", "") for a in (apps.data or [])}
+
+        logger.info(f"Processing {len(items)} pending apply queue items (rate-limited)")
+        applied_count = 0
+
+        for item in items:
+            platform = platform_map.get(item["application_id"], "")
+            user_id = item["user_id"]
+
+            allowed, reason = rate_limiter.can_apply(user_id, platform)
+            if not allowed:
+                logger.info(f"Skipping {item['id'][:8]}…: {reason}")
+                db.table("apply_queue").update({
+                    "status": "rate_limited",
+                    "error_msg": reason,
+                }).eq("id", item["id"]).execute()
+                continue
+
+            try:
+                apply_single_job(item["id"])
+                applied_count += 1
+            except Exception as e:
+                logger.error(f"Apply queue item {item['id']} failed: {e}")
+
+            # Randomized delay before next application
+            delay = rate_limiter.get_delay_seconds(platform)
+            remaining = rate_limiter.remaining_today(user_id, platform)
+            logger.info(
+                f"Rate limiter: {remaining} applications remaining today "
+                f"for {platform}, waiting {delay:.0f}s"
+            )
+            time.sleep(delay)
+
+        logger.info(f"Apply queue batch done: {applied_count}/{len(items)} processed")
+
+    except Exception as e:
+        logger.error(f"Apply queue drain failed: {e}")
+
+
+def _send_follow_up_reminders():
+    """Send follow-up reminders for stale applications."""
+    from workers.notification_worker import send_follow_up_reminders_task
+    try:
+        send_follow_up_reminders_task()
+    except Exception as e:
+        logger.error(f"Scheduled follow-up reminders failed: {e}")
+
+
+def _send_weekly_digest():
+    """Send weekly pipeline summary."""
+    from workers.notification_worker import send_weekly_digest_task
+    try:
+        send_weekly_digest_task()
+    except Exception as e:
+        logger.error(f"Scheduled weekly digest failed: {e}")
+
+
+def _run_session_health_checks():
+    """Validate active browser sessions."""
+    from workers.session_health import run_session_health_checks
+    try:
+        run_session_health_checks()
+    except Exception as e:
+        logger.error(f"Scheduled session health check failed: {e}")
+
+
+def start_scheduler():
+    """Register all scheduled jobs and start the scheduler."""
+    if scheduler.running:
+        return
+
+    scheduler.add_job(
+        _run_discovery_all_users,
+        CronTrigger(hour=f"*/{settings.DISCOVERY_INTERVAL_HOURS}"),
+        id="discover_jobs",
+        name="Job discovery for all users",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _process_apply_queue,
+        IntervalTrigger(minutes=30),
+        id="process_apply_queue",
+        name="Process auto-apply queue",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _send_follow_up_reminders,
+        CronTrigger(hour=9, minute=0),
+        id="follow_up_reminders",
+        name="Follow-up reminders (daily 9 AM)",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _send_weekly_digest,
+        CronTrigger(day_of_week="mon", hour=8, minute=0),
+        id="weekly_digest",
+        name="Weekly digest (Monday 8 AM)",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _run_session_health_checks,
+        CronTrigger(hour=f"*/{settings.SESSION_HEALTH_CHECK_HOURS}"),
+        id="session_health",
+        name="Session health checks",
+        replace_existing=True,
+    )
+
+    scheduler.start()
+    jobs = scheduler.get_jobs()
+    logger.info(f"Scheduler started with {len(jobs)} jobs:")
+    for job in jobs:
+        logger.info(f"  → {job.name} (next run: {job.next_run_time})")
+
+
+def stop_scheduler():
+    """Gracefully shut down the scheduler."""
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
+        logger.info("Scheduler stopped")

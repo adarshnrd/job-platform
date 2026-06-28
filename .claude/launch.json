@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Next.js Web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "apps/web", "run", "dev"],
+      "port": 3000,
+      "autoPort": false
+    },
+    {
+      "name": "FastAPI",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd apps/api && ./venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"],
+      "port": 8000
+    }
+  ]
+}
