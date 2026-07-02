@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
-import { Application, KanbanColumn, PipelineStats } from "@/types";
+import { createClient } from "@/lib/supabase/client";
+import { KanbanColumn, PipelineStats } from "@/types";
 import { PipelineKanban } from "./pipeline-kanban";
 import { StatsRow } from "./stats-row";
-import { Zap, RefreshCw, Globe, MapPin } from "lucide-react";
+import { Zap, RefreshCw, Globe, MapPin, FileSpreadsheet } from "lucide-react";
 import toast from "react-hot-toast";
 import { SessionBanner } from "./session-banner";
 
@@ -15,6 +16,7 @@ export function DashboardClient({ user }: { user: any }) {
   const [stats, setStats] = useState<PipelineStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [discovering, setDiscovering] = useState(false);
+  const [downloadingTracker, setDownloadingTracker] = useState(false);
   const [region, setRegion] = useState<Region>("india");
 
   const load = async () => {
@@ -48,6 +50,31 @@ export function DashboardClient({ user }: { user: any }) {
       setDiscovering(false);
     }
   };
+
+  const downloadTracker = useCallback(async () => {
+    setDownloadingTracker(true);
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+      const res = await fetch(api.export.jobTrackerUrl(), {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `job_tracker_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Job Tracker downloaded");
+    } catch (e: any) {
+      toast.error(e.message || "Download failed");
+    } finally {
+      setDownloadingTracker(false);
+    }
+  }, []);
 
   useEffect(() => { load(); }, []);
 
@@ -91,6 +118,15 @@ export function DashboardClient({ user }: { user: any }) {
             </button>
           </div>
 
+          <button
+            onClick={downloadTracker}
+            disabled={downloadingTracker}
+            className="btn-secondary flex items-center gap-2"
+            title="Download Job Tracker spreadsheet (all jobs with 50%+ match)"
+          >
+            <FileSpreadsheet size={14} />
+            {downloadingTracker ? "Downloading..." : "Job Tracker"}
+          </button>
           <button onClick={load} disabled={loading} className="btn-secondary flex items-center gap-2">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             Refresh

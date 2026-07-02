@@ -4,7 +4,6 @@ https://www.themuse.com/api/public/jobs
 This is the primary keyless India-capable API source (location=India).
 """
 import re
-from datetime import datetime
 from loguru import logger
 from scrapers.api_base import APIBaseScraper
 from models.job import JobListingCreate, Platform

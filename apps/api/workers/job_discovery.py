@@ -10,7 +10,7 @@ import asyncio
 import inspect
 from loguru import logger
 from database import get_db
-from services.ai_service import batch_parse_jds, batch_score_jobs
+from services.ai import batch_parse_jds, batch_score_jobs
 # Playwright (browser) scrapers — brittle, login-capable
 from scrapers.linkedin import LinkedInScraper
 from scrapers.naukri import NaukriScraper
@@ -299,12 +299,18 @@ async def _discover_for_user_async(user_id: str, region: str = "india"):
         f"{len(newly_matched)} matched (>={settings.RECOMMENDED_THRESHOLD}%)"
     )
 
+    try:
+        from services.job_tracker import update_tracker
+        update_tracker(user_id)
+    except Exception as e:
+        logger.warning(f"Job tracker update failed (non-fatal): {e}")
+
 
 async def _upsert_job_listing(job) -> str | None:
     from datetime import datetime
     job_data = job.dict()
-    job_data["required_skills"] = list(job_data.get("required_skills", []))
-    job_data["nice_to_have_skills"] = list(job_data.get("nice_to_have_skills", []))
+    job_data["required_skills"] = list(job_data.get("required_skills") or [])
+    job_data["nice_to_have_skills"] = list(job_data.get("nice_to_have_skills") or [])
     # Pydantic enum → its string value for the Postgres enum column.
     platform_value = getattr(job_data.get("source_platform"), "value", job_data.get("source_platform"))
     job_data["source_platform"] = platform_value

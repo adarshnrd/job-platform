@@ -348,31 +348,31 @@ export function ApplicationsClient({ userId }: { userId: string }) {
                         <div className="mt-4 pt-4 border-t border-zinc-800">
                           <div className="flex items-center justify-between mb-3">
                             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Submission Record</p>
-                            <SubmissionBadge status={(app as any).submission_status} />
+                            <SubmissionBadge status={app.submission_status} />
                           </div>
 
                           <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
                             {app.applied_at && (
                               <div className="flex gap-2"><span className="text-zinc-500">Submitted:</span><span className="text-zinc-300">{new Date(app.applied_at).toLocaleString()}</span></div>
                             )}
-                            {(app as any).submission_method && (
-                              <div className="flex gap-2"><span className="text-zinc-500">Method:</span><span className="text-zinc-300 capitalize">{(app as any).submission_method}</span></div>
+                            {app.submission_method && (
+                              <div className="flex gap-2"><span className="text-zinc-500">Method:</span><span className="text-zinc-300 capitalize">{app.submission_method}</span></div>
                             )}
-                            {(app as any).resume_snapshot?.name && (
-                              <div className="flex gap-2"><span className="text-zinc-500">Resume used:</span><span className="text-zinc-300">{(app as any).resume_snapshot.name}</span></div>
+                            {app.resume_snapshot?.name && (
+                              <div className="flex gap-2"><span className="text-zinc-500">Resume used:</span><span className="text-zinc-300">{app.resume_snapshot.name}</span></div>
                             )}
                             {app.applied_via && (
                               <div className="flex gap-2"><span className="text-zinc-500">Applied via:</span><span className="text-zinc-300">{app.applied_via}</span></div>
                             )}
-                            {(app as any).application_id && (
-                              <div className="flex gap-2"><span className="text-zinc-500">Confirmation:</span><span className="text-zinc-300 font-mono">{(app as any).application_id}</span></div>
+                            {app.application_id && (
+                              <div className="flex gap-2"><span className="text-zinc-500">Confirmation:</span><span className="text-zinc-300 font-mono">{app.application_id}</span></div>
                             )}
                           </div>
 
-                          {(app as any).failure_reason && (
+                          {app.failure_reason && (
                             <div className="mt-2 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5">
                               <AlertTriangle size={13} className="text-red-400 mt-0.5 flex-shrink-0" />
-                              <p className="text-xs text-red-300">{(app as any).failure_reason}</p>
+                              <p className="text-xs text-red-300">{app.failure_reason}</p>
                             </div>
                           )}
 

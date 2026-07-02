@@ -3,7 +3,6 @@ Remotive scraper — public JSON API for remote jobs (no key, global).
 https://remotive.com/api/remote-jobs
 """
 import re
-from datetime import datetime
 from loguru import logger
 from scrapers.api_base import APIBaseScraper
 from models.job import JobListingCreate, Platform

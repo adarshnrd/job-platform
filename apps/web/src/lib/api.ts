@@ -1,4 +1,18 @@
 import { createClient } from "@/lib/supabase/client";
+import type {
+  Application,
+  JobListing,
+  Resume,
+  User,
+  PipelineStats,
+  KanbanColumn,
+  InterviewPrep,
+  PrepareResponse,
+  PlatformSession,
+} from "@/types";
+
+/** Partial<User> that also allows null so callers can explicitly clear a column. */
+type ProfileUpdate = { [K in keyof User]?: User[K] | null };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -30,23 +44,25 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   // Applications
   applications: {
-    list: (params?: Record<string, any>) => request(`/applications?${new URLSearchParams(params).toString()}`),
-    pipeline: () => request<any>("/applications/pipeline"),
-    get: (id: string) => request<any>(`/applications/${id}`),
-    update: (id: string, data: any) => request<any>(`/applications/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-    star: (id: string) => request<any>(`/applications/${id}/star`, { method: "POST" }),
-    apply: (id: string) => request<any>(`/applications/${id}/apply`, { method: "POST", body: JSON.stringify({}) }),
-    interviewPrep: (id: string) => request<any>(`/applications/${id}/interview-prep`),
-    history: (id: string) => request<any>(`/applications/${id}/history`),
+    list: (params?: Record<string, string>) =>
+      request<{ data: Application[]; total: number; offset: number; limit: number }>(`/applications?${new URLSearchParams(params).toString()}`),
+    pipeline: () => request<{ columns: KanbanColumn[]; stats: PipelineStats; pipeline?: KanbanColumn[] }>("/applications/pipeline"),
+    get: (id: string) => request<Application>(`/applications/${id}`),
+    update: (id: string, data: Partial<Application>) =>
+      request<Application>(`/applications/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    star: (id: string) => request<{ is_starred: boolean }>(`/applications/${id}/star`, { method: "POST" }),
+    apply: (id: string) => request<{ success: boolean }>(`/applications/${id}/apply`, { method: "POST", body: JSON.stringify({}) }),
+    interviewPrep: (id: string) => request<InterviewPrep>(`/applications/${id}/interview-prep`),
+    history: (id: string) => request<{ events: Array<{ event: string; timestamp: string; details?: string }> }>(`/applications/${id}/history`),
     // Assisted apply
-    prepare: (id: string, overrides: Record<string, any> = {}) =>
-      request<any>(`/applications/${id}/prepare`, { method: "POST", body: JSON.stringify(overrides) }),
-    markOpened: (id: string) => request<any>(`/applications/${id}/opened`, { method: "POST", body: JSON.stringify({}) }),
+    prepare: (id: string, overrides: Record<string, unknown> = {}) =>
+      request<PrepareResponse>(`/applications/${id}/prepare`, { method: "POST", body: JSON.stringify(overrides) }),
+    markOpened: (id: string) => request<{ success: boolean }>(`/applications/${id}/opened`, { method: "POST", body: JSON.stringify({}) }),
     confirmSubmit: (id: string, confirmationId?: string) =>
-      request<any>(`/applications/${id}/confirm-submit`, { method: "POST", body: JSON.stringify({ confirmation_id: confirmationId }) }),
+      request<{ success: boolean }>(`/applications/${id}/confirm-submit`, { method: "POST", body: JSON.stringify({ confirmation_id: confirmationId }) }),
     markFailed: (id: string, reason: string) =>
-      request<any>(`/applications/${id}/mark-failed`, { method: "POST", body: JSON.stringify({ reason }) }),
-    events: (id: string) => request<any[]>(`/applications/${id}/events`),
+      request<{ success: boolean }>(`/applications/${id}/mark-failed`, { method: "POST", body: JSON.stringify({ reason }) }),
+    events: (id: string) => request<Array<{ event: string; timestamp: string; details?: string }>>(`/applications/${id}/events`),
     draftAnswer: (id: string, question: string) =>
       request<{ question: string; answer: string }>(`/applications/${id}/draft-answer`, {
         method: "POST", body: JSON.stringify({ question }),
@@ -71,22 +87,23 @@ export const api = {
   },
   // Application Profile
   profile: {
-    get: () => request<any>("/profile/application"),
-    save: (data: Record<string, any>) => request<any>("/profile/application", { method: "PUT", body: JSON.stringify(data) }),
-    getSkillExperience: () => request<any>("/profile/skill-experience"),
+    get: () => request<User>("/profile/application"),
+    save: (data: ProfileUpdate) => request<User>("/profile/application", { method: "PUT", body: JSON.stringify(data) }),
+    getSkillExperience: () => request<Record<string, number>>("/profile/skill-experience"),
     saveSkillExperience: (data: Record<string, number>) =>
-      request<any>("/profile/skill-experience", { method: "PUT", body: JSON.stringify(data) }),
+      request<Record<string, number>>("/profile/skill-experience", { method: "PUT", body: JSON.stringify(data) }),
   },
   // Jobs
   jobs: {
-    list: (params?: Record<string, any>) => request<any>(`/jobs?${new URLSearchParams(params).toString()}`),
-    get: (id: string) => request<any>(`/jobs/${id}`),
-    score: (id: string) => request<any>(`/jobs/${id}/score`, { method: "POST" }),
-    discover: (data: any) => request<any>("/jobs/discover", { method: "POST", body: JSON.stringify(data) }),
+    list: (params?: Record<string, string>) =>
+      request<{ data: Application[]; total: number; offset: number; limit: number; matched?: number }>(`/jobs?${new URLSearchParams(params).toString()}`),
+    get: (id: string) => request<Application | JobListing>(`/jobs/${id}`),
+    score: (id: string) => request<{ success: boolean; match_score: number; tier: string; analysis: Record<string, unknown> }>(`/jobs/${id}/score`, { method: "POST" }),
+    discover: (data: Record<string, unknown>) => request<{ success: boolean; message: string }>("/jobs/discover", { method: "POST", body: JSON.stringify(data) }),
   },
   // Resumes
   resumes: {
-    list: () => request<any[]>("/resumes/"),
+    list: () => request<Resume[]>("/resumes/"),
     upload: async (formData: FormData) => {
       const headers = await getAuthHeaders();
       let res: Response;
@@ -104,50 +121,60 @@ export const api = {
       }
       return res.json();
     },
-    setPrimary: (id: string) => request<any>(`/resumes/${id}/set-primary`, { method: "POST" }),
-    delete: (id: string) => request<any>(`/resumes/${id}`, { method: "DELETE" }),
-    tailor: (resumeId: string, jobId: string) => request<any>(`/resumes/${resumeId}/tailor?job_listing_id=${jobId}`, { method: "POST" }),
+    setPrimary: (id: string) => request<{ success: boolean }>(`/resumes/${id}/set-primary`, { method: "POST" }),
+    delete: (id: string) => request<{ success: boolean }>(`/resumes/${id}`, { method: "DELETE" }),
+    tailor: (resumeId: string, jobId: string) =>
+      request<{ tailoring: Record<string, unknown>; resume_id: string; job_listing_id: string }>(
+        `/resumes/${resumeId}/tailor?job_listing_id=${jobId}`, { method: "POST" }
+      ),
   },
   // AI
   ai: {
-    skillGaps: () => request<any>("/ai/skill-gaps"),
-    copilot: (message: string, context = "general") => request<any>("/ai/copilot", { method: "POST", body: JSON.stringify({ message, context }) }),
-    coverLetter: (jobId: string, resumeId?: string) => request<any>("/ai/cover-letter", { method: "POST", body: JSON.stringify({ job_listing_id: jobId, resume_id: resumeId }) }),
+    skillGaps: () => request<{ missing_skills: unknown[]; trending_skills: string[]; market_insights: Record<string, unknown> }>("/ai/skill-gaps"),
+    copilot: (message: string, context = "general") =>
+      request<{ response: string }>("/ai/copilot", { method: "POST", body: JSON.stringify({ message, context }) }),
+    coverLetter: (jobId: string, resumeId?: string) =>
+      request<{ cover_letter: string }>("/ai/cover-letter", { method: "POST", body: JSON.stringify({ job_listing_id: jobId, resume_id: resumeId }) }),
   },
   // Automation
   automation: {
-    queue: () => request<any[]>("/automation/queue"),
-    cancelQueue: (id: string) => request<any>(`/automation/queue/${id}`, { method: "DELETE" }),
-    updateSettings: (data: any) => request<any>("/automation/settings", { method: "PATCH", body: JSON.stringify(data) }),
-    getBlacklist: () => request<any[]>("/automation/blacklist"),
-    addToBlacklist: (company_name: string) => request<any>("/automation/blacklist", { method: "POST", body: JSON.stringify({ company_name }) }),
-    removeFromBlacklist: (company_name: string) => request<any>(`/automation/blacklist/${encodeURIComponent(company_name)}`, { method: "DELETE" }),
+    queue: () => request<Array<{ id: string; status: string; platform: string; job_listing_id: string }>>("/automation/queue"),
+    cancelQueue: (id: string) => request<{ success: boolean }>(`/automation/queue/${id}`, { method: "DELETE" }),
+    updateSettings: (data: Partial<User>) =>
+      request<User>("/automation/settings", { method: "PATCH", body: JSON.stringify(data) }),
+    getBlacklist: () => request<Array<{ company_name: string }>>("/automation/blacklist"),
+    addToBlacklist: (company_name: string) =>
+      request<{ success: boolean }>("/automation/blacklist", { method: "POST", body: JSON.stringify({ company_name }) }),
+    removeFromBlacklist: (company_name: string) =>
+      request<{ success: boolean }>(`/automation/blacklist/${encodeURIComponent(company_name)}`, { method: "DELETE" }),
   },
   // Approval queue
   approval: {
-    pending: () => request<any[]>("/applications/pending-approval"),
-    approve: (id: string) => request<any>(`/applications/${id}/approve`, { method: "POST" }),
-    dismiss: (id: string) => request<any>(`/applications/${id}/dismiss`, { method: "POST" }),
+    pending: () => request<Application[]>("/applications/pending-approval"),
+    approve: (id: string) => request<{ success: boolean }>(`/applications/${id}/approve`, { method: "POST" }),
+    dismiss: (id: string) => request<{ success: boolean }>(`/applications/${id}/dismiss`, { method: "POST" }),
   },
   // AI Career Copilot
   copilot: {
-    chat: (data: { message: string; context?: string; job_title?: string; company?: string; history?: any[] }) =>
-      request<any>("/copilot/chat", { method: "POST", body: JSON.stringify(data) }),
+    chat: (data: { message: string; context?: string; job_title?: string; company?: string; history?: Array<{ role: string; content: string }> }) =>
+      request<{ response: string; context?: string }>("/copilot/chat", { method: "POST", body: JSON.stringify(data) }),
     generateCoverLetter: (application_id: string) =>
-      request<any>("/copilot/generate-cover-letter", { method: "POST", body: JSON.stringify({ application_id }) }),
-    analyzeResume: () => request<any>("/copilot/analyze-resume", { method: "POST", body: JSON.stringify({}) }),
-    careerSuggestions: () => request<any>("/copilot/career-suggestions"),
+      request<{ cover_letter: string }>("/copilot/generate-cover-letter", { method: "POST", body: JSON.stringify({ application_id }) }),
+    analyzeResume: () => request<{ analysis: string }>("/copilot/analyze-resume", { method: "POST", body: JSON.stringify({}) }),
+    careerSuggestions: () =>
+      request<{ suggestions: string; top_skill_gaps: Array<[string, number]> }>("/copilot/career-suggestions"),
   },
   // Export
   export: {
     csvUrl: (status?: string) => `${API_BASE}/api/v1/export/applications/csv${status ? `?status=${status}` : ""}`,
     excelUrl: (status?: string) => `${API_BASE}/api/v1/export/applications/excel${status ? `?status=${status}` : ""}`,
+    jobTrackerUrl: () => `${API_BASE}/api/v1/export/job-tracker`,
   },
   // Session-based authentication
   sessions: {
-    platforms: () => request<any[]>("/sessions/platforms"),
-    list: () => request<{ sessions: any[] }>("/sessions"),
-    get: (platform: string) => request<any>(`/sessions/${platform}`),
+    platforms: () => request<Array<{ id: string; name: string; supported: boolean }>>("/sessions/platforms"),
+    list: () => request<{ sessions: PlatformSession[] }>("/sessions"),
+    get: (platform: string) => request<PlatformSession>(`/sessions/${platform}`),
     connect: (platform: string) =>
       request<{ handshake_token: string; poll_url: string; expires_at: string }>(
         `/sessions/${platform}/connect`, { method: "POST", body: JSON.stringify({}) }
@@ -163,7 +190,7 @@ export const api = {
     refresh: (platform: string) =>
       request<{ valid: boolean; status: any }>(`/sessions/${platform}/refresh`, { method: "POST", body: JSON.stringify({}) }),
     disconnect: (platform: string) =>
-      request<any>(`/sessions/${platform}`, { method: "DELETE" }),
-    audit: () => request<{ events: any[] }>("/sessions/audit"),
+      request<{ success: boolean }>(`/sessions/${platform}`, { method: "DELETE" }),
+    audit: () => request<{ events: Array<{ event: string; timestamp: string; platform?: string }> }>("/sessions/audit"),
   },
 };

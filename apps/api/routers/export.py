@@ -1,4 +1,4 @@
-"""Export router — CSV and Excel download of application data."""
+"""Export router — CSV, Excel, and Job Tracker downloads."""
 from auth import get_user_id
 import csv
 import io
@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from database import get_db
+from services.job_tracker import get_tracker_stream
 
 router = APIRouter(prefix="/export", tags=["export"])
 
@@ -142,3 +143,22 @@ async def export_applications_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.get("/job-tracker")
+async def download_job_tracker(user_id: str = Depends(get_user_id)):
+    """Download the Job Tracker spreadsheet.
+
+    Contains all discovered jobs with >= 50% match score. Rebuilt from
+    the database on each request so it always reflects the latest state.
+    """
+    try:
+        stream = get_tracker_stream(user_id)
+        filename = f"job_tracker_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        return StreamingResponse(
+            iter([stream.read()]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate tracker: {e}")

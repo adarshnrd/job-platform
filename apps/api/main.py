@@ -42,10 +42,17 @@ def _validate_config():
 
     enc_key = settings.SESSION_ENCRYPTION_KEY
     if enc_key == "dev-key-change-in-production":
-        logger.warning(
-            "⚠️  SESSION_ENCRYPTION_KEY is using the insecure default. "
-            "Generate a real key: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
-        )
+        if not settings.DEBUG:
+            errors.append(
+                "SESSION_ENCRYPTION_KEY must be changed from the default in production "
+                "(set DEBUG=True for development). Generate a key: "
+                "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            )
+        else:
+            logger.warning(
+                "SESSION_ENCRYPTION_KEY is using the insecure default. "
+                "Generate a real key: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            )
 
     if errors:
         for e in errors:

@@ -1,11 +1,10 @@
 """LinkedIn job scraper — uses Playwright with stealth."""
 import asyncio
-import re
 from typing import Optional
 from loguru import logger
 from playwright.async_api import Page
 from scrapers.base import BaseScraper
-from models.job import JobListingCreate, Platform, WorkMode, JobType
+from models.job import JobListingCreate, Platform, JobType
 
 
 class LinkedInScraper(BaseScraper):

@@ -9,7 +9,7 @@ attempted but degrade gracefully if 03_application_tracking.sql hasn't been run.
 from datetime import datetime, timezone
 from loguru import logger
 from database import get_db
-from services.ai_service import generate_cover_letter, answer_screening_question, NEEDS_INFO_TOKEN
+from services.ai import generate_cover_letter, answer_screening_question, NEEDS_INFO_TOKEN
 
 db = get_db()
 

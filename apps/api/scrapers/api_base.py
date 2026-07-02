@@ -10,7 +10,6 @@ from typing import Optional
 from loguru import logger
 import httpx
 from scrapers.base import BaseScraper, RateLimiter
-from models.job import JobListingCreate
 
 
 class APIBaseScraper(BaseScraper):

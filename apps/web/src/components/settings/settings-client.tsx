@@ -3,12 +3,13 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { api } from "@/lib/api";
 import { User as UserIcon, Zap, Ban, X } from "lucide-react";
+import type { User, Platform } from "@/types";
 import toast from "react-hot-toast";
 import { SessionConnections } from "./session-connections";
 
-const PLATFORMS = [
+const PLATFORMS: Platform[] = [
   "linkedin", "naukri", "indeed", "wellfound", "hirist", "instahyre",
-  "cutshort", "foundit", "glassdoor", "dice", "ziprecruiter", "remoteok",
+  "cutshort", "foundit", "glassdoor", "remoteok",
   "weworkremotely",
 ];
 
@@ -20,7 +21,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   weworkremotely: "We Work Remotely",
 };
 
-export function SettingsClient({ profile, userId }: { profile: any; userId: string }) {
+export function SettingsClient({ profile, userId }: { profile: Partial<User>; userId: string }) {
   const [form, setForm] = useState({
     full_name: profile?.full_name || "",
     headline: profile?.headline || "",
@@ -118,11 +119,11 @@ export function SettingsClient({ profile, userId }: { profile: any; userId: stri
     finally { setSaving(false); }
   };
 
-  const togglePlatform = (p: string) => {
+  const togglePlatform = (p: Platform) => {
     setForm(f => ({
       ...f,
       preferred_platforms: f.preferred_platforms.includes(p)
-        ? f.preferred_platforms.filter((x: string) => x !== p)
+        ? f.preferred_platforms.filter((x) => x !== p)
         : [...f.preferred_platforms, p],
     }));
   };

@@ -1,7 +1,6 @@
 """Email notification service using Resend API."""
 
 import resend
-from datetime import datetime
 from config import get_settings
 
 settings = get_settings()

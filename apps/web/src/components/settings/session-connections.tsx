@@ -6,20 +6,7 @@ import {
   CheckCircle, AlertTriangle, XCircle, Clock,
 } from "lucide-react";
 import toast from "react-hot-toast";
-
-type SessionStatus = {
-  platform: string;
-  display_name: string;
-  status: string;
-  masked_username?: string;
-  captured_at?: string;
-  expires_at?: string;
-  last_used_at?: string;
-  last_validated_at?: string;
-  use_count?: number;
-  success_rate?: number;
-  health?: string;
-};
+import type { PlatformSession } from "@/types";
 
 const HEALTH_STYLES = {
   green: { bg: "bg-green-500/10", border: "border-green-500/30", text: "text-green-400", icon: CheckCircle },
@@ -50,7 +37,7 @@ function daysUntil(dateStr?: string): string {
 }
 
 export function SessionConnections() {
-  const [sessions, setSessions] = useState<SessionStatus[]>([]);
+  const [sessions, setSessions] = useState<PlatformSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [pollingToken, setPollingToken] = useState<string | null>(null);

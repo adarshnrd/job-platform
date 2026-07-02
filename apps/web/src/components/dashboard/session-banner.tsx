@@ -3,16 +3,10 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { AlertTriangle, XCircle, X, Settings } from "lucide-react";
 import Link from "next/link";
-
-type SessionInfo = {
-  platform: string;
-  display_name: string;
-  status: string;
-  health: string;
-};
+import type { PlatformSession } from "@/types";
 
 export function SessionBanner() {
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [sessions, setSessions] = useState<PlatformSession[]>([]);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {

@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "Next.js Web",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "apps/web", "run", "dev"],
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "export PATH=/Users/mindpath/.nvm/versions/node/v22.12.0/bin:$PATH && cd apps/web && node ./node_modules/.bin/next dev --port 3000"],
       "port": 3000,
       "autoPort": false
     },

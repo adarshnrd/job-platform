@@ -1,7 +1,6 @@
 """Naukri session adapter — capture, validate, apply."""
 
 import httpx
-from loguru import logger
 from services.sessions.adapters.base import (
     BaseSessionAdapter,
     CapturedSession,

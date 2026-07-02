@@ -1,9 +1,7 @@
 """
 WeWorkRemotely scraper — uses their RSS feeds (no Playwright needed).
 """
-import asyncio
 from datetime import datetime
-from typing import Optional
 from loguru import logger
 import httpx
 import xml.etree.ElementTree as ET

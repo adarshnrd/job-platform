@@ -5,7 +5,7 @@ Manages browser-login flows, session status, and platform connections.
 
 import asyncio
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Body
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from loguru import logger
 
 from auth import get_user_id

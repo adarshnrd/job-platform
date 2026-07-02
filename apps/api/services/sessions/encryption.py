@@ -8,7 +8,6 @@ import json
 import base64
 import hashlib
 from cryptography.fernet import Fernet, InvalidToken
-from loguru import logger
 from services.sessions.exceptions import EncryptionError
 
 

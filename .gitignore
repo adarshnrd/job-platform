@@ -29,3 +29,7 @@ Thumbs.db
 # Build artifacts
 *.egg-info/
 build/
+
+# Generated at runtime
+apps/api/data/
+apps/api/source/

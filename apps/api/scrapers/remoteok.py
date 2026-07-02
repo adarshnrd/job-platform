@@ -2,9 +2,7 @@
 RemoteOK scraper — uses the public JSON API (no Playwright needed).
 https://remoteok.com/api
 """
-import asyncio
 from datetime import datetime
-from typing import Optional
 from loguru import logger
 import httpx
 from scrapers.base import BaseScraper

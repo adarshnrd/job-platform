@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from loguru import logger
 import tempfile, os
 from database import get_db
-from services.ai_service import tailor_resume_content
 from config import settings
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
@@ -52,8 +51,7 @@ async def upload_resume(
         try:
             parsed_text = _extract_text(tmp_path, file.content_type)
             if parsed_text:
-                from services.ai_service import call_llm, _parse_json_response
-                import json
+                from services.ai import call_llm, _parse_json_response
                 parse_prompt = f"""Parse this resume and return structured JSON with keys:
 full_name, email, phone, location, summary, skills (array), tech_stack (object with years),
 experience (array of objects), education (array), projects (array), certifications (array),
@@ -127,7 +125,7 @@ async def tailor_resume(resume_id: str, job_listing_id: str, user_id: str = Depe
     if not resume_res.data or not job_res.data:
         raise HTTPException(status_code=404)
 
-    from services.ai_service import parse_job_description, tailor_resume_content
+    from services.ai import parse_job_description, tailor_resume_content
     jd_parsed = parse_job_description(job_res.data["jd_text"])
     tailoring = tailor_resume_content(resume_res.data.get("parsed_data", {}), jd_parsed)
     return {"tailoring": tailoring, "resume_id": resume_id, "job_listing_id": job_listing_id}

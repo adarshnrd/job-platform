@@ -17,7 +17,7 @@ from database import get_db
 from services.sessions.encryption import EncryptionService
 from services.sessions.audit import AuditLogger
 from services.sessions.health import SessionHealthService
-from services.sessions.adapters.registry import get_adapter, PLATFORM_META
+from services.sessions.adapters.registry import PLATFORM_META
 from services.sessions.exceptions import (
     SessionNotFoundError,
     SessionExpiredError,

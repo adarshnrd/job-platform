@@ -13,10 +13,10 @@ export function AnalyticsClient({ userId }: { userId: string }) {
   const supabase = createClient();
 
   useEffect(() => {
-    supabase.from("application_details").select("*").eq("user_id", userId).then(({ data }) => {
+    Promise.resolve(supabase.from("application_details").select("*").eq("user_id", userId)).then(({ data }) => {
       setApps(data || []);
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   }, [userId]);
 
   if (loading) return <div className="flex items-center justify-center h-64 text-zinc-500">Loading analytics...</div>;

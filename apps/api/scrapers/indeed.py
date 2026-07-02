@@ -1,12 +1,10 @@
 """Indeed job scraper using Publisher API + Playwright fallback."""
 import asyncio
-import httpx
 from typing import Optional
 from loguru import logger
 from playwright.async_api import Page
 from scrapers.base import BaseScraper
 from models.job import JobListingCreate, Platform
-from config import settings
 
 
 class IndeedScraper(BaseScraper):
