@@ -5,7 +5,7 @@ from typing import Optional
 from loguru import logger
 from playwright.async_api import Page
 from scrapers.base import BaseScraper
-from models.job import JobListingCreate, Platform, WorkMode
+from models.job import JobListingCreate, Platform
 
 
 class NaukriScraper(BaseScraper):

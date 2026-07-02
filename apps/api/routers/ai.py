@@ -4,8 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from pydantic import BaseModel
 from database import get_db
-from services.ai_service import analyze_skill_gaps, generate_cover_letter, call_llm, get_usage_stats
-from config import settings
+from services.ai import analyze_skill_gaps, generate_cover_letter, call_llm, get_usage_stats
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 

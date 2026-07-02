@@ -30,7 +30,7 @@ export function JobsClient() {
       if (filterMode) params.work_mode = filterMode;
       if (showArchived) params.show_archived = "true";
       const data = await api.jobs.list(params);
-      setJobs(data.matched || []);
+      setJobs(data.data || data.matched || []);
     } catch (e: any) {
       toast.error(e.message || "Failed to load jobs");
     } finally {

@@ -3,32 +3,12 @@ from datetime import datetime
 from typing import Optional, Any
 from enum import Enum
 from uuid import UUID
-from pydantic import BaseModel, HttpUrl, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
-
-class ApplicationStatus(str, Enum):
-    DISCOVERED = "discovered"
-    MATCHED = "matched"
-    QUEUED = "queued"
-    APPLIED = "applied"
-    UNDER_REVIEW = "under_review"
-    ASSESSMENT = "assessment"
-    INTERVIEW_SCHEDULED = "interview_scheduled"
-    TECHNICAL_ROUND = "technical_round"
-    HR_ROUND = "hr_round"
-    OFFER_RECEIVED = "offer_received"
-    REJECTED = "rejected"
-    WITHDRAWN = "withdrawn"
-    ACCEPTED = "accepted"
-
-
-class MatchTier(str, Enum):
-    AUTO_APPLY = "auto_apply"
-    RECOMMENDED = "recommended"
-    WATCHLIST = "watchlist"
-    ARCHIVED = "archived"
+# ApplicationStatus and MatchTier are defined in models/application.py (canonical).
+from models.application import ApplicationStatus, MatchTier  # noqa: F401
 
 
 class JobSource(str, Enum):
@@ -224,51 +204,13 @@ class MatchScore(MatchScoreResult):
 
 
 # ── Application ───────────────────────────────────────────────────────────────
-
-class ApplicationCreate(BaseModel):
-    job_listing_id: UUID
-    resume_id: Optional[UUID] = None
-    notes: Optional[str] = None
-
-
-class ApplicationUpdate(BaseModel):
-    status: Optional[ApplicationStatus] = None
-    recruiter_name: Optional[str] = None
-    recruiter_email: Optional[str] = None
-    next_follow_up_at: Optional[datetime] = None
-    notes: Optional[str] = None
-    offer_salary: Optional[int] = None
-    offer_details: Optional[dict] = None
-
-
-class Application(BaseModel):
-    id: UUID
-    user_id: UUID
-    job_listing_id: UUID
-    resume_id: Optional[UUID] = None
-    status: ApplicationStatus
-    cover_letter_used: Optional[str] = None
-    confirmation_id: Optional[str] = None
-    applied_automatically: bool = False
-    applied_at: Optional[datetime] = None
-    recruiter_name: Optional[str] = None
-    recruiter_email: Optional[str] = None
-    next_follow_up_at: Optional[datetime] = None
-    notes: Optional[str] = None
-    offer_salary: Optional[int] = None
-    last_activity_at: Optional[datetime] = None
-    created_at: datetime
-    updated_at: datetime
-
-    # Joined fields
-    job_title: Optional[str] = None
-    company: Optional[str] = None
-    location: Optional[str] = None
-    source_platform: Optional[str] = None
-    match_score: Optional[int] = None
-
-    class Config:
-        from_attributes = True
+# Canonical definitions live in models/application.py.
+from models.application import (  # noqa: F401, E402
+    ApplicationCreate,
+    ApplicationUpdate,
+    ApplicationOut as Application,
+    MatchAnalysis,
+)
 
 
 # ── Interview Prep ────────────────────────────────────────────────────────────

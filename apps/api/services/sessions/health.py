@@ -9,7 +9,6 @@ from database import get_db
 from services.sessions.encryption import EncryptionService
 from services.sessions.audit import AuditLogger
 from services.sessions.adapters.registry import get_adapter
-from services.sessions.exceptions import SessionInvalidError
 
 
 class SessionHealthService:

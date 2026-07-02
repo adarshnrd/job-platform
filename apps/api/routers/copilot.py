@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from typing import Optional
 from loguru import logger
 from database import get_db
-from services.ai_service import call_llm
+from services.ai import call_llm
 
 router = APIRouter(prefix="/copilot", tags=["copilot"])
 

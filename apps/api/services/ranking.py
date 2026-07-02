@@ -12,7 +12,7 @@ BUCKET_LABELS = {0: "Today", 1: "2 days", 2: "This week", 3: "Older"}
 
 def recency_bucket(row: dict) -> int:
     """Assign a recency bucket: 0=24h, 1=2d, 2=1w, 3=older."""
-    ts = row.get("job_posted_at") or row.get("job_discovered_at")
+    ts = row.get("job_posted_at") or row.get("job_discovered_at") or row.get("created_at")
     if not ts:
         return 3
     try:
@@ -49,7 +49,7 @@ def filter_and_rank(
     visible = []
 
     for r in rows:
-        score = r.get("match_score", 0)
+        score = r.get("match_score") or 0
         tier = r.get("match_tier", "")
 
         rescued = False
@@ -89,7 +89,7 @@ def filter_and_rank(
     visible.sort(key=lambda r: (
         r["recency_bucket"],
         r.get("skill_rescued", False),
-        -r.get("match_score", 0),
+        -(r.get("match_score") or 0),
     ))
 
     return visible

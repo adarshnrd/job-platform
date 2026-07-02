@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from typing import Optional
 from loguru import logger
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from config import settings
 from models.job import JobListingCreate, Platform
 

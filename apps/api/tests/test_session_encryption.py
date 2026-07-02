@@ -6,9 +6,6 @@ Imports modules directly to avoid __init__.py pulling in heavy deps (loguru, sup
 """
 import sys
 import os
-import json
-import base64
-import hashlib
 import pytest
 from unittest.mock import MagicMock
 
@@ -26,7 +23,6 @@ sys.modules.setdefault("playwright.async_api", MagicMock())
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from cryptography.fernet import Fernet
 from services.sessions.encryption import EncryptionService
 
 

@@ -15,6 +15,7 @@ export interface User {
   full_name?: string;
   avatar_url?: string;
   headline?: string;
+  phone?: string;
   location?: string;
   experience_years: number;
   skills: string[];
@@ -27,6 +28,9 @@ export interface User {
   expected_salary_min?: number;
   expected_salary_max?: number;
   notice_period_days: number;
+  work_authorization?: string;
+  willing_to_relocate?: boolean;
+  current_salary?: number;
   is_onboarded: boolean;
 }
 
@@ -93,6 +97,13 @@ export interface Application {
   jd_text?: string;
   job_posted_at?: string;
   job_discovered_at?: string;
+  // Submission tracking (from 03_application_tracking migration)
+  submission_status?: "ready" | "opened" | "submitted" | "failed";
+  submission_method?: string;
+  resume_snapshot?: { name: string; url: string } | null;
+  failure_reason?: string;
+  applied_via?: string;
+  apply_url?: string;
   // Ranking annotations (added by backend)
   recency_bucket?: number;
   recency_label?: string;
@@ -139,6 +150,41 @@ export interface Notification {
   is_read: boolean;
   action_url?: string;
   created_at: string;
+}
+
+export interface ScreeningAnswer {
+  question: string;
+  answer: string;
+  source?: string;
+}
+
+/** Response of POST /applications/{id}/prepare — either a ready package or a needs_input request. */
+export interface PrepareResponse {
+  needs_input?: { field: string; label: string }[];
+  submission_status?: string;
+  apply_url?: string;
+  cover_letter?: string;
+  screening_answers?: ScreeningAnswer[];
+  form_data?: Record<string, unknown>;
+  resume?: { resume_id?: string; name?: string; file_url?: string; version?: number };
+  job?: Record<string, unknown>;
+  error?: string;
+  status_code?: number;
+}
+
+/** One entry of GET /sessions — platform session status for dashboard/settings. */
+export interface PlatformSession {
+  platform: string;
+  display_name: string;
+  status: string;
+  health: string;
+  masked_username?: string;
+  captured_at?: string;
+  expires_at?: string;
+  last_used_at?: string;
+  last_validated_at?: string;
+  use_count?: number;
+  success_rate?: number;
 }
 
 export interface InterviewQuestion {

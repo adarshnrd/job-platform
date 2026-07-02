@@ -5,14 +5,30 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, B
 from typing import Optional
 from loguru import logger
 from database import get_db
-from models.application import ApplicationUpdate, ApplicationStatus
-from services.ai_service import generate_interview_prep, draft_answer_for_user, rephrase_answer, generate_cover_letter
+from models.application import ApplicationUpdate
+from services.ai import generate_interview_prep, draft_answer_for_user, rephrase_answer, generate_cover_letter
 from services import application_service
 from services.ranking import filter_and_rank, recency_bucket, BUCKET_LABELS
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
 db = get_db()
+
+
+def _build_apps_query(db_client, user_id: str, status=None, tier=None, is_starred=None):
+    """Build a fresh application_details query with filters.
+
+    Must be called each time because the Supabase query builder is mutable —
+    .order() modifies the builder in-place, so a failed attempt poisons it.
+    """
+    q = db_client.table("application_details").select("*").eq("user_id", user_id)
+    if status:
+        q = q.eq("status", status)
+    if tier:
+        q = q.eq("match_tier", tier)
+    if is_starred is not None:
+        q = q.eq("is_starred", is_starred)
+    return q
 
 
 @router.get("/")
@@ -30,18 +46,14 @@ async def list_applications(
         user_res = db.table("users").select("skills").eq("id", user_id).single().execute()
         user_skills = set(user_res.data.get("skills") or []) if user_res.data else set()
 
-        q = db.table("application_details").select("*").eq("user_id", user_id)
-        if status:
-            q = q.eq("status", status)
-        if tier:
-            q = q.eq("match_tier", tier)
-        if is_starred is not None:
-            q = q.eq("is_starred", is_starred)
+        qkw = dict(status=status, tier=tier, is_starred=is_starred)
 
         try:
-            result = q.order("job_posted_at", desc=True).limit(300).execute()
+            result = _build_apps_query(db, user_id, **qkw)\
+                .order("job_posted_at", desc=True).limit(300).execute()
         except Exception:
-            result = q.order("created_at", desc=True).limit(300).execute()
+            result = _build_apps_query(db, user_id, **qkw)\
+                .order("created_at", desc=True).limit(300).execute()
         rows = result.data or []
 
         ranked = filter_and_rank(rows, user_skills, min_score, show_archived)
@@ -75,7 +87,7 @@ async def get_pipeline(user_id: str = Depends(get_user_id)):
         pipeline = []
         for col in columns:
             col_apps = [a for a in apps if a.get("status") in col["statuses"]]
-            col_apps.sort(key=lambda a: (a.get("recency_bucket", 3), -a.get("match_score", 0)))
+            col_apps.sort(key=lambda a: (a.get("recency_bucket", 3), -(a.get("match_score") or 0)))
             pipeline.append({**col, "applications": col_apps, "count": len(col_apps)})
 
         stats = {
@@ -83,7 +95,7 @@ async def get_pipeline(user_id: str = Depends(get_user_id)):
             "total_matched": sum(1 for a in apps if a.get("status") in ["matched", "queued"]),
             "active_interviews": sum(1 for a in apps if a.get("status") in ["interview_scheduled", "technical_round", "hr_round"]),
             "offers": sum(1 for a in apps if a.get("status") in ["offer_received", "accepted"]),
-            "avg_match_score": round(sum(a.get("match_score", 0) for a in apps) / len(apps), 1) if apps else 0,
+            "avg_match_score": round(sum((a.get("match_score") or 0) for a in apps) / len(apps), 1) if apps else 0,
         }
         return {"pipeline": pipeline, "stats": stats}
     except Exception as e:

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 from database import get_supabase_admin
 from services.notification_service import send_follow_up_reminders, send_weekly_digest
-from services.ai_service import generate_follow_up_email
+from services.ai import generate_follow_up_email
 
 
 def send_follow_up_reminders_task():

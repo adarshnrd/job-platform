@@ -6,7 +6,7 @@ to avoid triggering anti-automation systems on job portals.
 
 import random
 import threading
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from loguru import logger
 from config import settings

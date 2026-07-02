@@ -1,5 +1,4 @@
 """Dice.com job scraper using their public search API."""
-import asyncio
 import httpx
 from loguru import logger
 from scrapers.base import BaseScraper

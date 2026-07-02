@@ -68,7 +68,18 @@
       "Bash(pip install *)",
       "Bash(/Users/mindpath/Downloads/x12/job-platform/apps/api/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --reload)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/api/v1/sessions/platforms)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/api/v1/sessions/platforms)",
+      "Bash(/Users/mindpath/Downloads/x12/job-platform/apps/api/source/bin/python --version)",
+      "Bash(./source/bin/python -c ' *)",
+      "Bash(./venv/bin/pip list *)",
+      "Bash(./venv/bin/ruff check *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(lsof -nP -iTCP:8000 -sTCP:LISTEN)",
+      "Bash(lsof -nP -iTCP:3000 -sTCP:LISTEN)",
+      "Bash(curl -s -o /dev/null -w \"frontend HTTP %{http_code}\\\\n\" http://localhost:3000/auth/login)",
+      "Bash(git check-ignore *)",
+      "Bash(git rm *)",
+      "Bash(echo \"TSC EXIT: $?\")"
     ]
   }
 }

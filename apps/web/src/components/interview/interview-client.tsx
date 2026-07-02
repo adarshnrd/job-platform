@@ -25,14 +25,15 @@ export function InterviewClient({ userId }: { userId: string }) {
   const [copilotLoading, setCopilotLoading] = useState(false);
 
   useEffect(() => {
-    supabase.from("application_details")
-      .select("*").eq("user_id", userId)
-      .not("status", "in", '("matched","queued","discovered")')
-      .order("applied_at", { ascending: false })
-      .then(({ data }) => {
-        setApplications(data || []);
-        if (preselectedAppId && !selectedAppId) setSelectedAppId(preselectedAppId);
-      });
+    Promise.resolve(
+      supabase.from("application_details")
+        .select("*").eq("user_id", userId)
+        .not("status", "in", '("matched","queued","discovered")')
+        .order("applied_at", { ascending: false })
+    ).then(({ data }) => {
+      setApplications(data || []);
+      if (preselectedAppId && !selectedAppId) setSelectedAppId(preselectedAppId);
+    }).catch(() => {});
   }, [userId]);
 
   useEffect(() => {

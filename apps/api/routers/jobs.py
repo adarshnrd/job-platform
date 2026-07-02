@@ -6,13 +6,29 @@ from typing import Optional
 from loguru import logger
 from database import get_db
 from models.job import DiscoveryRequest
-from services.ai_service import parse_job_description
+from services.ai import parse_job_description
 from services.ranking import filter_and_rank, paginate
 from workers.job_discovery import run_discovery_for_user
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 db_admin = get_db()
+
+
+def _build_jobs_query(db, user_id: str, work_mode=None, is_easy_apply=None, platform_filter=None):
+    """Build a fresh application_details query with filters.
+
+    Must be called each time because the Supabase query builder is mutable —
+    .order() modifies the builder in-place, so a failed attempt poisons it.
+    """
+    q = db.table("application_details").select("*").eq("user_id", user_id)
+    if work_mode:
+        q = q.eq("job_work_mode", work_mode)
+    if is_easy_apply is not None:
+        q = q.eq("is_easy_apply", is_easy_apply)
+    if platform_filter:
+        q = q.eq("source_platform", platform_filter)
+    return q
 
 
 @router.get("/")
@@ -32,21 +48,14 @@ async def list_jobs(
         user_res = db_admin.table("users").select("skills").eq("id", user_id).single().execute()
         user_skills = set(user_res.data.get("skills") or []) if user_res.data else set()
 
-        q = db_admin.table("application_details")\
-            .select("*")\
-            .eq("user_id", user_id)
-
-        if work_mode:
-            q = q.eq("job_work_mode", work_mode)
-        if is_easy_apply is not None:
-            q = q.eq("is_easy_apply", is_easy_apply)
-        if platform:
-            q = q.eq("source_platform", platform)
+        qkw = dict(work_mode=work_mode, is_easy_apply=is_easy_apply, platform_filter=platform)
 
         try:
-            result = q.order("job_posted_at", desc=True).limit(300).execute()
+            result = _build_jobs_query(db_admin, user_id, **qkw)\
+                .order("job_posted_at", desc=True).limit(300).execute()
         except Exception:
-            result = q.order("created_at", desc=True).limit(300).execute()
+            result = _build_jobs_query(db_admin, user_id, **qkw)\
+                .order("created_at", desc=True).limit(300).execute()
         rows = result.data or []
 
         if query:
@@ -98,7 +107,7 @@ async def score_job(job_id: str, background_tasks: BackgroundTasks, user_id: str
         user = user_res.data
 
         jd_parsed = parse_job_description(job["jd_text"])
-        from services.ai_service import compute_match_score
+        from services.ai import compute_match_score
         match_result = compute_match_score(user, jd_parsed, job["jd_text"])
 
         app_data = {

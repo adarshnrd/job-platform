@@ -4,7 +4,6 @@ https://www.arbeitnow.com/api/job-board-api
 Filters client-side by query keywords (the API has no search param).
 """
 import re
-from datetime import datetime
 from loguru import logger
 from scrapers.api_base import APIBaseScraper
 from models.job import JobListingCreate, Platform

@@ -3,7 +3,6 @@ Adzuna scraper — structured job API (free key, ~20 countries incl. India/UK/US
 https://developer.adzuna.com/
 Needs ADZUNA_APP_ID + ADZUNA_APP_KEY in .env. Dormant until both are set.
 """
-from datetime import datetime
 from loguru import logger
 from scrapers.api_base import APIBaseScraper
 from models.job import JobListingCreate, Platform

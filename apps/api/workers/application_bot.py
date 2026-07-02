@@ -7,7 +7,7 @@ Enforces per-platform rate limits with randomized human-like delays.
 import asyncio
 from loguru import logger
 from database import get_db
-from services.ai_service import generate_cover_letter, answer_screening_question
+from services.ai import generate_cover_letter, answer_screening_question
 from services.sessions.service import SessionService
 from services.sessions.adapters.registry import get_adapter
 from services.sessions.exceptions import (
@@ -199,6 +199,12 @@ async def _apply_job_async(queue_item_id: str):
     _update_application_result(
         queue_item, queue_item_id, application_id, user_id, user, app, platform, result, cover_letter,
     )
+
+    try:
+        from services.job_tracker import update_tracker
+        update_tracker(user_id)
+    except Exception as e:
+        logger.warning(f"Job tracker update failed (non-fatal): {e}")
 
     return result
 
