@@ -59,6 +59,8 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   linkedin: "LinkedIn", naukri: "Naukri", indeed: "Indeed", wellfound: "Wellfound",
   hirist: "Hirist", instahyre: "Instahyre", cutshort: "Cutshort", glassdoor: "Glassdoor",
   foundit: "Foundit", remoteok: "RemoteOK", weworkremotely: "We Work Remotely",
+  iimjobs: "iimjobs", timesjobs: "TimesJobs", shine: "Shine",
+  freshersworld: "Freshersworld", ycombinator: "Y Combinator",
   company_portal: "Company Portal", other: "Other",
 };
 

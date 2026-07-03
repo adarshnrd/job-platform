@@ -20,6 +20,12 @@ class Platform(str, Enum):
     dice = "dice"
     ziprecruiter = "ziprecruiter"
     angellist = "angellist"
+    # Phase 3/4 India + global sources
+    iimjobs = "iimjobs"
+    timesjobs = "timesjobs"
+    shine = "shine"
+    freshersworld = "freshersworld"
+    ycombinator = "ycombinator"
     # API-first sources
     remotive = "remotive"
     arbeitnow = "arbeitnow"

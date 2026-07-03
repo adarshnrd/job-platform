@@ -8,7 +8,7 @@ export type ApplicationStatus =
 export type MatchTier = "auto_apply" | "recommended" | "watchlist" | "archived";
 export type WorkMode = "remote" | "hybrid" | "onsite";
 export type JobType = "full_time" | "part_time" | "contract" | "freelance" | "internship";
-export type Platform = "linkedin" | "naukri" | "indeed" | "wellfound" | "hirist" | "instahyre" | "cutshort" | "glassdoor" | "foundit" | "remoteok" | "weworkremotely" | "company_portal" | "other";
+export type Platform = "linkedin" | "naukri" | "indeed" | "wellfound" | "hirist" | "instahyre" | "cutshort" | "glassdoor" | "foundit" | "remoteok" | "weworkremotely" | "iimjobs" | "timesjobs" | "shine" | "freshersworld" | "ycombinator" | "company_portal" | "other";
 
 export interface User {
   id: string;
