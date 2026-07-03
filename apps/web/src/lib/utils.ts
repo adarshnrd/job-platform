@@ -35,6 +35,7 @@ export const STATUS_CONFIG: Record<ApplicationStatus, { label: string; color: st
   matched:             { label: "Matched",            color: "text-blue-400",    bg: "bg-blue-900/40" },
   queued:              { label: "Queued",             color: "text-amber-400",   bg: "bg-amber-900/40" },
   applying:            { label: "Applying...",        color: "text-amber-400",   bg: "bg-amber-900/40" },
+  needs_input:         { label: "Needs Answer",        color: "text-amber-300",   bg: "bg-amber-900/40" },
   applied:             { label: "Applied",            color: "text-green-400",   bg: "bg-green-900/40" },
   under_review:        { label: "Under Review",       color: "text-cyan-400",    bg: "bg-cyan-900/40" },
   assessment:          { label: "Assessment",         color: "text-purple-400",  bg: "bg-purple-900/40" },

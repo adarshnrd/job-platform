@@ -7,7 +7,7 @@ Enforces per-platform rate limits with randomized human-like delays.
 import asyncio
 from loguru import logger
 from database import get_db
-from services.ai import generate_cover_letter, answer_screening_question
+from services.ai import generate_cover_letter
 from services.sessions.service import SessionService
 from services.sessions.adapters.registry import get_adapter
 from services.sessions.exceptions import (
@@ -214,8 +214,16 @@ async def _apply_job_async(queue_item_id: str):
 
     cover_letter = generate_cover_letter(user, job_data, resume_summary)
 
-    async def screening_answerer(question: str) -> str:
-        return answer_screening_question(question, user, job_data)
+    # Answer Bank resolver: fills every question it can from the profile/bank/AI,
+    # and appends any genuinely unknown question to `pending_tracker` so we can
+    # pause the application instead of submitting incomplete or guessed answers.
+    from services.questions import build_question_resolver, QuestionService
+    question_service = QuestionService()
+    pending_tracker: list[dict] = []
+    screening_answerer = build_question_resolver(
+        user_id, user=user, job_data=job_data, application_id=application_id,
+        platform=platform, pending_tracker=pending_tracker, service=question_service,
+    )
 
     result = {"success": False, "error": "Unsupported platform"}
 
@@ -243,6 +251,15 @@ async def _apply_job_async(queue_item_id: str):
     finally:
         if resume_path and os.path.exists(resume_path):
             os.unlink(resume_path)
+
+    # ── Pause for unknown questions ──────────────────────────────────────
+    # If the application hit a question we couldn't answer, don't mark it applied
+    # or failed — pause it as needs_input and ask the user (their answers are
+    # already banked as pending_questions by the resolver).
+    if pending_tracker and not result.get("skipped"):
+        return _pause_for_input(
+            queue_item_id, application_id, user_id, user, app, platform, pending_tracker,
+        )
 
     # ── Record result and rate limit tracking ────────────────────────────
     if result.get("success") and not result.get("skipped"):
@@ -364,6 +381,45 @@ async def _apply_generic_portal(app, user, resume_path, cover_letter, screening_
         logger.error(f"Generic portal apply failed: {e}")
 
     return result
+
+
+def _pause_for_input(queue_item_id, application_id, user_id, user, app, platform, pending):
+    """Pause an application that hit unanswered questions.
+
+    Sets the application to needs_input and the queue item to awaiting_input, then
+    notifies the user. The unknown questions were already persisted as
+    pending_questions by the resolver — the user answers them in the /answers
+    inbox, which re-queues the application automatically.
+    """
+    count = len(pending)
+    preview = "; ".join(p["question"][:60] for p in pending[:3])
+    logger.info(f"Application {application_id[:8]}… paused — {count} question(s) need input: {preview}")
+
+    db.table("job_applications").update({"status": "needs_input"}).eq("id", application_id).execute()
+    db.table("apply_queue").update({
+        "status": "awaiting_input",
+        "error_msg": f"Waiting on {count} question(s): {preview}"[:500],
+    }).eq("id", queue_item_id).execute()
+
+    try:
+        from services.notification_service import notify_input_needed
+        notify_input_needed(
+            user_id=user_id,
+            user_email=user.get("email", ""),
+            application={"id": application_id, "question_count": count},
+            job={"title": app.get("job_title"), "company": app.get("job_company"), "id": app.get("job_listing_id")},
+        )
+    except Exception as e:
+        logger.debug(f"input_needed notification skipped: {e}")
+
+    try:
+        from services.job_tracker import update_tracker
+        update_tracker(user_id)
+    except Exception:
+        pass
+
+    return {"success": False, "needs_input": True, "pending_count": count,
+            "message": f"Paused — {count} question(s) need your answer"}
 
 
 def _update_application_result(

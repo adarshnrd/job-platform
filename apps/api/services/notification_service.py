@@ -189,6 +189,36 @@ def notify_application_submitted(user_id: str, user_email: str, application: dic
     logger.info(f"Notified {user_email} about application to {job.get('company')}")
 
 
+def notify_input_needed(user_id: str, user_email: str, application: dict, job: dict):
+    """Notify user that an application is paused pending answers to new questions."""
+    count = application.get("question_count", 1)
+    title = job.get("title", "a job")
+    company = job.get("company", "")
+    answers_url = f"{settings.ALLOWED_ORIGINS[0]}/answers"
+
+    subject = f"❓ {count} question{'s' if count != 1 else ''} to answer — {title} at {company}"
+    html = f"""
+<h2>An application needs your input</h2>
+<p>Your application for <strong>{title}</strong> at <strong>{company}</strong> is paused
+because it asked {count} question{'s' if count != 1 else ''} we don't have answers for yet.</p>
+<p>Answer {'them' if count != 1 else 'it'} once and we'll finish this application automatically —
+and reuse your answer{'s' if count != 1 else ''} for every future application that asks the same thing.</p>
+<p style="margin-top: 20px;">
+  <a href="{answers_url}" style="background: #f59e0b; color: #000; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">Answer now →</a>
+</p>
+"""
+    _send_email(user_email, subject, html)
+    _create_notification(
+        user_id=user_id,
+        notif_type="input_needed",
+        title=f"{count} question{'s' if count != 1 else ''} to answer — {title}",
+        body=f"Application to {company} is paused pending your answer{'s' if count != 1 else ''}.",
+        payload={"application_id": str(application.get("id")), "question_count": count},
+        action_url="/answers",
+    )
+    logger.info(f"input_needed notification sent to {user_email} ({count} question(s))")
+
+
 def notify_new_matches(user_id: str, user_email: str, matches: list):
     """Notify user about new high-scoring job matches."""
     if not matches:

@@ -8,6 +8,7 @@ import { StatsRow } from "./stats-row";
 import { Zap, RefreshCw, Globe, MapPin, FileSpreadsheet } from "lucide-react";
 import toast from "react-hot-toast";
 import { SessionBanner } from "./session-banner";
+import { PendingQuestionsBanner } from "./pending-questions-banner";
 
 type Region = "india" | "global";
 
@@ -82,6 +83,8 @@ export function DashboardClient({ user }: { user: any }) {
     <div className="space-y-6">
       {/* Session expiry banner */}
       <SessionBanner />
+      {/* Pending Answer Bank questions */}
+      <PendingQuestionsBanner />
 
       {/* Header */}
       <div className="flex items-center justify-between">

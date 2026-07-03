@@ -1,5 +1,6 @@
 export type ApplicationStatus =
   | "discovered" | "matched" | "queued" | "applying" | "applied"
+  | "needs_input"
   | "under_review" | "assessment" | "interview_scheduled"
   | "technical_round" | "hr_round" | "offer_received"
   | "rejected" | "withdrawn" | "accepted";
@@ -189,6 +190,37 @@ export interface PlatformSession {
   last_validated_at?: string;
   use_count?: number;
   success_rate?: number;
+}
+
+/** One entry of GET /answers — a banked question joined with its saved answer. */
+export interface SavedAnswer {
+  id: string;                 // question_bank id
+  question_text: string;
+  question_type: string;
+  category: string;
+  options?: string[];
+  source_platform?: string;
+  answer: string | null;      // active answer value, null if unanswered
+  answer_source?: string | null;
+  times_used: number;
+  last_used_at?: string | null;
+  is_answered: boolean;
+  is_profile_mapped: boolean;
+}
+
+/** One entry of GET /answers/pending — a question blocking an application. */
+export interface PendingQuestion {
+  pending_id: string;
+  application_id: string;
+  question_id: string;
+  question_text: string;
+  question_type: string;
+  options?: string[];
+  category: string;
+  job_title?: string;
+  job_company?: string;
+  source_platform?: string;
+  created_at: string;
 }
 
 /** One entry of GET /portals — a job portal's integration capabilities. */
