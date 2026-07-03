@@ -110,6 +110,20 @@ def _has_key(cls) -> bool:
     return bool(has()) if callable(has) else True
 
 
+def _portal_auto_appliable(platform: str) -> bool:
+    """True only for Tier-A portals we can submit end to end.
+
+    Unknown platforms default to True so a portal missing from the registry still
+    behaves as before (auto-queue) rather than silently never applying.
+    """
+    try:
+        from services.portals import get_portal
+        cap = get_portal(platform)
+        return cap.auto_apply if cap else True
+    except Exception:
+        return True
+
+
 async def _call_search(scraper, *, query, location, max_results, credentials, region):
     """Call search_jobs passing only the kwargs the scraper actually accepts."""
     params = inspect.signature(scraper.search_jobs).parameters
@@ -275,7 +289,11 @@ async def _discover_for_user_async(user_id: str, region: str = "india"):
             app_data, on_conflict="user_id,job_listing_id"
         ).execute()
 
-        if tier == "auto_apply" and user.get("auto_apply_enabled"):
+        # Only auto-queue when the *portal* supports full automation (Tier A).
+        # Tier-B portals (e.g. Wellfound, Indeed) stay as matches for assisted
+        # apply even at a high score — we never queue what we can't submit.
+        job_platform = getattr(raw_jobs[orig_idx].source_platform, "value", raw_jobs[orig_idx].source_platform)
+        if tier == "auto_apply" and user.get("auto_apply_enabled") and _portal_auto_appliable(job_platform):
             if app_res.data:
                 db.table("apply_queue").insert({
                     "application_id": app_res.data[0]["id"],
