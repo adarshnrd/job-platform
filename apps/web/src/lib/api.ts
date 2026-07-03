@@ -10,6 +10,8 @@ import type {
   PrepareResponse,
   PlatformSession,
   PortalCapability,
+  SavedAnswer,
+  PendingQuestion,
 } from "@/types";
 
 /** Partial<User> that also allows null so callers can explicitly clear a column. */
@@ -176,6 +178,23 @@ export const api = {
   // Portal capability matrix
   portals: {
     list: () => request<{ portals: PortalCapability[] }>("/portals"),
+  },
+  // Answer Bank
+  answers: {
+    list: (params?: { search?: string; category?: string }) =>
+      request<{ answers: SavedAnswer[] }>(`/answers?${new URLSearchParams(params as Record<string, string>).toString()}`),
+    create: (data: { question_text: string; value: string; question_type?: string; category?: string }) =>
+      request<{ success: boolean; answer: unknown }>("/answers", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, value: string) =>
+      request<{ success: boolean }>(`/answers/${id}`, { method: "PATCH", body: JSON.stringify({ value }) }),
+    remove: (id: string) => request<{ success: boolean }>(`/answers/${id}`, { method: "DELETE" }),
+    pending: () => request<{ pending: PendingQuestion[] }>("/answers/pending"),
+    answerPending: (pendingId: string, value: string) =>
+      request<{ success: boolean; requeued_applications: number }>(`/answers/pending/${pendingId}`, {
+        method: "POST", body: JSON.stringify({ value }),
+      }),
+    skipPending: (pendingId: string) =>
+      request<{ success: boolean }>(`/answers/pending/${pendingId}/skip`, { method: "POST", body: JSON.stringify({}) }),
   },
   // Session-based authentication
   sessions: {
