@@ -97,6 +97,10 @@ export interface Application {
   jd_text?: string;
   job_posted_at?: string;
   job_discovered_at?: string;
+  // Listing liveness (from 06_listing_validation migration)
+  job_is_active?: boolean;
+  job_expired_at?: string;
+  job_expiry_reason?: string;
   // Submission tracking (from 03_application_tracking migration)
   submission_status?: "ready" | "opened" | "submitted" | "failed";
   submission_method?: string;
@@ -185,6 +189,28 @@ export interface PlatformSession {
   last_validated_at?: string;
   use_count?: number;
   success_rate?: number;
+}
+
+/** One entry of GET /portals — a job portal's integration capabilities. */
+export interface PortalCapability {
+  key: string;
+  display_name: string;
+  tier: "A" | "B" | "C";
+  apply_label: "Auto" | "Assisted" | "View only";
+  regions: string[];
+  search: boolean;
+  details: boolean;
+  auto_apply: boolean;
+  assisted_apply: boolean;
+  resume_upload: boolean;
+  question_detection: boolean;
+  requires_session: boolean;
+  requires_key: boolean;
+  anti_bot: "low" | "medium" | "high";
+  aliases: string[];
+  notes: string;
+  has_adapter: boolean;
+  has_scraper: boolean;
 }
 
 export interface InterviewQuestion {

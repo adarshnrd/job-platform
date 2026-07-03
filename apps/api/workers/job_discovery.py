@@ -9,7 +9,7 @@ regions ("india" / "global") it serves.
 import asyncio
 import inspect
 from loguru import logger
-from database import get_db
+from database import get_db, select_in_batches
 from services.ai import batch_parse_jds, batch_score_jobs
 # Playwright (browser) scrapers — brittle, login-capable
 from scrapers.linkedin import LinkedInScraper
@@ -171,8 +171,10 @@ async def _discover_for_user_async(user_id: str, region: str = "india"):
         existing_res = db.table("job_applications").select("job_listing_id").eq("user_id", user_id).execute()
         if existing_res.data:
             app_job_ids = [r["job_listing_id"] for r in existing_res.data]
-            seen_res = db.table("job_listings").select("source_url").in_("id", app_job_ids).execute()
-            existing_urls = {r["source_url"] for r in (seen_res.data or [])}
+            # Batched IN — the id set grows unbounded with a user's history and a
+            # single .in_() would eventually exceed PostgREST's URL length limit.
+            seen_rows = select_in_batches(db, "job_listings", "source_url", "id", app_job_ids)
+            existing_urls = {r["source_url"] for r in seen_rows}
     except Exception as e:
         logger.warning(f"Existing-URL dedup lookup skipped: {e}")
 
@@ -185,14 +187,11 @@ async def _discover_for_user_async(user_id: str, region: str = "india"):
     raw_jobs = []
 
     for src in sources:
+        # Discovery runs unauthenticated. The legacy platform_credentials table
+        # stored plaintext passwords and has been retired here — authenticated
+        # actions (applying) go through the encrypted SessionService instead.
+        # Login-capable scrapers already degrade gracefully to public search.
         credentials = None
-        if src.login_capable:
-            creds_res = db.table("platform_credentials").select("*").eq("user_id", user_id).eq("platform", src.name).maybe_single().execute()
-            if creds_res.data:
-                credentials = {
-                    "username": creds_res.data.get("encrypted_username"),
-                    "password": creds_res.data.get("encrypted_password"),
-                }
 
         try:
             async with src.cls() as scraper:

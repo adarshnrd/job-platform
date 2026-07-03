@@ -1,15 +1,30 @@
 "use client";
-import { Application } from "@/types";
+import { Application, PortalCapability } from "@/types";
 import { STATUS_CONFIG, TIER_CONFIG, PLATFORM_LABELS, formatSalary, scoreColor, timeAgo, cn } from "@/lib/utils";
-import { Star, ExternalLink, Zap, BookOpen, MapPin, Clock } from "lucide-react";
+import { Star, ExternalLink, Zap, BookOpen, MapPin, Clock, XCircle } from "lucide-react";
 import { api } from "@/lib/api";
 import toast from "react-hot-toast";
 import Link from "next/link";
 
-export function JobCard({ job, onUpdate }: { job: Application; onUpdate: () => void }) {
+const APPLY_TIER_STYLE: Record<string, string> = {
+  Auto: "bg-green-900/30 text-green-300 border border-green-800/50",
+  Assisted: "bg-amber-900/30 text-amber-300 border border-amber-800/50",
+  "View only": "bg-zinc-800 text-zinc-400 border border-zinc-700",
+};
+
+export function JobCard({ job, onUpdate, portal }: { job: Application; onUpdate: () => void; portal?: PortalCapability }) {
   const score = job.match_score;
   const tier = TIER_CONFIG[job.match_tier];
   const status = STATUS_CONFIG[job.status];
+
+  const handleReportExpired = async () => {
+    if (!confirm("Mark this listing as expired/invalid? It will be removed from your job list.")) return;
+    try {
+      await api.jobs.reportExpired(job.job_listing_id);
+      toast.success("Listing removed");
+      onUpdate();
+    } catch (e: any) { toast.error(e.message || "Failed to remove listing"); }
+  };
 
   const handleApply = async () => {
     try {
@@ -72,6 +87,12 @@ export function JobCard({ job, onUpdate }: { job: Application; onUpdate: () => v
             {PLATFORM_LABELS[job.source_platform]}
           </span>
         )}
+        {portal && (
+          <span title={portal.notes || `${portal.display_name}: ${portal.apply_label} apply`}
+            className={cn("text-xs px-2 py-0.5 rounded-full font-medium", APPLY_TIER_STYLE[portal.apply_label] || APPLY_TIER_STYLE["View only"])}>
+            {portal.apply_label}
+          </span>
+        )}
         {job.is_easy_apply && (
           <span className="text-xs px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-300 border border-blue-800/50">⚡ Easy Apply</span>
         )}
@@ -118,6 +139,10 @@ export function JobCard({ job, onUpdate }: { job: Application; onUpdate: () => v
           <BookOpen size={11} /> Prep
         </Link>
         <div className="ml-auto flex gap-1">
+          <button onClick={handleReportExpired} title="Report expired / invalid listing"
+            className="p-1.5 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors">
+            <XCircle size={13} />
+          </button>
           {job.source_url && (
             <a href={job.source_url} target="_blank" rel="noopener noreferrer"
               className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors">

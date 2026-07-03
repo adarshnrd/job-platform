@@ -49,6 +49,11 @@ def filter_and_rank(
     visible = []
 
     for r in rows:
+        # Hide listings marked dead by the revalidation worker. `job_is_active`
+        # is absent pre-migration (defaults to visible), so only False hides.
+        if r.get("job_is_active") is False and not show_archived:
+            continue
+
         score = r.get("match_score") or 0
         tier = r.get("match_tier", "")
 

@@ -7,6 +7,17 @@
 > intended for new developers joining the project, auditors reviewing system
 > behavior, and maintainers planning improvements.
 
+> ⚠️ **Architecture update (2026):** Sections below that describe **Celery**,
+> **Redis**, **Celery Beat**, or **OpenAI embeddings** are **out of date**. The
+> platform now runs all background work **in-process via APScheduler** (see
+> `apps/api/scheduler.py`) — there is no Redis, no Celery, and no separate worker
+> or beat process. Where you read "Celery Beat triggers X", read "APScheduler
+> triggers X". AI scoring uses **Groq + NVIDIA** (Anthropic optional), not
+> OpenAI. Job-board auth is **session-based and encrypted** (`services/sessions/`),
+> not stored username/password credentials. See `README.md` for the current,
+> accurate setup and architecture. The subsystem/data-model/workflow descriptions
+> remain conceptually valid; only the infrastructure mechanism changed.
+
 ---
 
 ## Table of Contents

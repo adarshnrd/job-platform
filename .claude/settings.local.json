@@ -79,7 +79,8 @@
       "Bash(curl -s -o /dev/null -w \"frontend HTTP %{http_code}\\\\n\" http://localhost:3000/auth/login)",
       "Bash(git check-ignore *)",
       "Bash(git rm *)",
-      "Bash(echo \"TSC EXIT: $?\")"
+      "Bash(echo \"TSC EXIT: $?\")",
+      "Bash(git commit -q -m ' *)"
     ]
   }
 }

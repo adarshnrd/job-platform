@@ -138,6 +138,22 @@ async def score_job(job_id: str, background_tasks: BackgroundTasks, user_id: str
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/{job_id}/report-expired")
+async def report_expired(job_id: str, user_id: str = Depends(get_user_id)):
+    """User reports a dead/invalid listing. Marks it inactive so it drops out
+    of everyone's jobs list, dashboard, and tracker."""
+    try:
+        from services.listing_validator import mark_expired
+        mark_expired(job_id, "Reported by user")
+        # Also withdraw this user's application so it leaves their pipeline.
+        db_admin.table("job_applications").update({"status": "withdrawn"})\
+            .eq("job_listing_id", job_id).eq("user_id", user_id).execute()
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Report-expired failed for {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/discover")
 async def trigger_discovery(
     request: DiscoveryRequest,

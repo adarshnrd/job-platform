@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { Application } from "@/types";
+import { Application, PortalCapability } from "@/types";
 import { JobCard } from "./job-card";
 import { Search, Eye, EyeOff } from "lucide-react";
 import toast from "react-hot-toast";
@@ -21,6 +21,20 @@ export function JobsClient() {
   const [filterMode, setFilterMode] = useState("");
   const [filterTier, setFilterTier] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [portals, setPortals] = useState<Record<string, PortalCapability>>({});
+
+  useEffect(() => {
+    api.portals.list()
+      .then(({ portals }) => {
+        const map: Record<string, PortalCapability> = {};
+        for (const p of portals) {
+          map[p.key] = p;
+          for (const alias of p.aliases) map[alias] = p;
+        }
+        setPortals(map);
+      })
+      .catch(() => {});
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -130,7 +144,10 @@ export function JobsClient() {
                 <div className="flex-1 h-px bg-zinc-800" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {bucketJobs.map(job => <JobCard key={job.id} job={job} onUpdate={load} />)}
+                {bucketJobs.map(job => (
+                  <JobCard key={job.id} job={job} onUpdate={load}
+                    portal={job.source_platform ? portals[job.source_platform] : undefined} />
+                ))}
               </div>
             </div>
           ))}
