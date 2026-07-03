@@ -11,6 +11,7 @@ from routers.copilot import router as copilot_router
 from routers.export import router as export_router
 from routers.profile import router as profile_router
 from routers.sessions import router as sessions_router
+from routers.portals import router as portals_router
 
 
 @asynccontextmanager
@@ -85,6 +86,7 @@ app.include_router(copilot_router, prefix=settings.API_PREFIX)
 app.include_router(export_router, prefix=settings.API_PREFIX)
 app.include_router(profile_router, prefix=settings.API_PREFIX)
 app.include_router(sessions_router, prefix=settings.API_PREFIX)
+app.include_router(portals_router, prefix=settings.API_PREFIX)
 
 
 @app.get("/health")

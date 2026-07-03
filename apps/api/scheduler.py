@@ -25,14 +25,28 @@ scheduler = BackgroundScheduler(
 
 
 def _run_discovery_all_users():
-    """Discover jobs for every user with auto_apply_enabled."""
+    """Discover jobs for every user who hasn't opted out of scheduled discovery.
+
+    `auto_discovery_enabled` defaults TRUE (see migration 07); a user can turn it
+    off to stop the background cron from spending LLM quota on their behalf while
+    still browsing/discovering manually.
+    """
     from database import get_supabase_admin
     from workers.job_discovery import run_discovery_for_user
 
     try:
         db = get_supabase_admin()
-        users = db.table("users").select("id, preferred_locations").execute()
+        try:
+            users = db.table("users").select(
+                "id, preferred_locations, auto_discovery_enabled"
+            ).execute()
+        except Exception:
+            # Pre-migration fallback: column may not exist yet.
+            users = db.table("users").select("id, preferred_locations").execute()
+
         for user in (users.data or []):
+            if user.get("auto_discovery_enabled") is False:
+                continue
             user_id = user["id"]
             locations = user.get("preferred_locations") or ["India"]
             region = "india" if any("india" in loc.lower() for loc in locations) else "global"
@@ -154,6 +168,24 @@ def _run_session_health_checks():
         logger.error(f"Scheduled session health check failed: {e}")
 
 
+def _run_listing_revalidation():
+    """Mark dead/expired job listings inactive."""
+    from workers.listing_validator import run_listing_revalidation
+    try:
+        run_listing_revalidation()
+    except Exception as e:
+        logger.error(f"Scheduled listing revalidation failed: {e}")
+
+
+def _run_stuck_application_recovery():
+    """Reset applications orphaned mid-apply by a crash/restart."""
+    from workers.application_bot import recover_stuck_applications
+    try:
+        recover_stuck_applications()
+    except Exception as e:
+        logger.error(f"Scheduled stuck-application recovery failed: {e}")
+
+
 def start_scheduler():
     """Register all scheduled jobs and start the scheduler."""
     if scheduler.running:
@@ -196,6 +228,22 @@ def start_scheduler():
         CronTrigger(hour=f"*/{settings.SESSION_HEALTH_CHECK_HOURS}"),
         id="session_health",
         name="Session health checks",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _run_listing_revalidation,
+        CronTrigger(hour=f"*/{settings.LISTING_REVALIDATION_HOURS}"),
+        id="listing_revalidation",
+        name="Revalidate active job listings",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _run_stuck_application_recovery,
+        IntervalTrigger(minutes=settings.STUCK_RECOVERY_INTERVAL_MINUTES),
+        id="stuck_recovery",
+        name="Recover stuck applications",
         replace_existing=True,
     )
 

@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     MAX_APPLY_RETRIES: int = 3
     DISCOVERY_INTERVAL_HOURS: int = 4
     MAX_JOBS_PER_DISCOVERY: int = 50
+    LISTING_REVALIDATION_HOURS: int = 12
+    STUCK_RECOVERY_INTERVAL_MINUTES: int = 20
+    STUCK_APPLYING_TIMEOUT_MINUTES: int = 30
 
     # Rate limiting — per-platform daily caps and human-like delays
     RATE_LIMIT_LINKEDIN_DAILY: int = 40

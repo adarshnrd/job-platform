@@ -64,6 +64,42 @@ def check_already_applied_by_url(user_id: str, source_url: str) -> dict | None:
         return None
 
 
+def recover_stuck_applications() -> dict:
+    """Reset applications orphaned mid-apply by a crash/restart.
+
+    A row left in 'applying' with no applied_at past the timeout means the bot
+    died between marking it in-progress and recording a result. Return it to
+    'matched' and its queue item to 'pending' so it retries cleanly.
+    """
+    from datetime import datetime, timezone, timedelta
+    from config import settings
+
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(minutes=settings.STUCK_APPLYING_TIMEOUT_MINUTES)
+    ).isoformat()
+    recovered = 0
+    try:
+        stuck = (
+            db.table("job_applications")
+            .select("id, updated_at")
+            .eq("status", "applying")
+            .is_("applied_at", "null")
+            .lt("updated_at", cutoff)
+            .execute()
+        )
+        for app in (stuck.data or []):
+            db.table("job_applications").update({"status": "matched"}).eq("id", app["id"]).execute()
+            db.table("apply_queue").update(
+                {"status": "pending", "error_msg": "Recovered from stuck 'applying' state"}
+            ).eq("application_id", app["id"]).eq("status", "running").execute()
+            recovered += 1
+        if recovered:
+            logger.warning(f"Recovered {recovered} stuck application(s) from 'applying' state")
+    except Exception as e:
+        logger.error(f"Stuck-application recovery failed: {e}")
+    return {"recovered": recovered}
+
+
 def apply_single_job(queue_item_id: str):
     """Apply to a single job. Called directly via FastAPI BackgroundTasks."""
     try:
@@ -113,6 +149,22 @@ async def _apply_job_async(queue_item_id: str):
             "existing_application_id": existing["id"],
             "applied_url": existing.get("applied_url"),
         }
+
+    # ── Listing liveness preflight ───────────────────────────────────────
+    # Don't spend a rate-limit slot on a job that has already closed.
+    from services.listing_validator import validate_listing, mark_expired
+    source_url = app.get("source_url", "")
+    if source_url:
+        is_live, live_reason = await validate_listing(source_url, platform)
+        if not is_live:
+            logger.info(f"Skipping apply — listing no longer live: {live_reason}")
+            mark_expired(app.get("job_listing_id", ""), live_reason)
+            db.table("job_applications").update({"status": "matched"}).eq("id", application_id).execute()
+            db.table("apply_queue").update({
+                "status": "failed",
+                "error_msg": f"Listing expired: {live_reason}"[:500],
+            }).eq("id", queue_item_id).execute()
+            return {"success": False, "error": f"Listing expired: {live_reason}", "expired": True}
 
     # ── Rate limit check ─────────────────────────────────────────────────
     allowed, reason = rate_limiter.can_apply(user_id, platform)

@@ -26,15 +26,27 @@ class AutomationSettings(BaseModel):
     auto_apply_enabled: bool
     auto_apply_threshold: int
     preferred_platforms: list[str]
+    auto_discovery_enabled: bool | None = None
 
 
 @router.patch("/settings")
 async def update_automation_settings(body: AutomationSettings, user_id: str = Depends(get_user_id)):
-    db.table("users").update({
+    updates = {
         "auto_apply_enabled": body.auto_apply_enabled,
         "auto_apply_threshold": max(60, min(100, body.auto_apply_threshold)),
         "preferred_platforms": body.preferred_platforms,
-    }).eq("id", user_id).execute()
+    }
+    if body.auto_discovery_enabled is not None:
+        updates["auto_discovery_enabled"] = body.auto_discovery_enabled
+    try:
+        db.table("users").update(updates).eq("id", user_id).execute()
+    except Exception as e:
+        # Pre-migration fallback: drop the new column and retry.
+        if "auto_discovery_enabled" in str(e):
+            updates.pop("auto_discovery_enabled", None)
+            db.table("users").update(updates).eq("id", user_id).execute()
+        else:
+            raise
     return {"success": True}
 
 

@@ -9,6 +9,7 @@ import type {
   InterviewPrep,
   PrepareResponse,
   PlatformSession,
+  PortalCapability,
 } from "@/types";
 
 /** Partial<User> that also allows null so callers can explicitly clear a column. */
@@ -100,6 +101,8 @@ export const api = {
     get: (id: string) => request<Application | JobListing>(`/jobs/${id}`),
     score: (id: string) => request<{ success: boolean; match_score: number; tier: string; analysis: Record<string, unknown> }>(`/jobs/${id}/score`, { method: "POST" }),
     discover: (data: Record<string, unknown>) => request<{ success: boolean; message: string }>("/jobs/discover", { method: "POST", body: JSON.stringify(data) }),
+    reportExpired: (jobListingId: string) =>
+      request<{ success: boolean }>(`/jobs/${jobListingId}/report-expired`, { method: "POST", body: JSON.stringify({}) }),
   },
   // Resumes
   resumes: {
@@ -169,6 +172,10 @@ export const api = {
     csvUrl: (status?: string) => `${API_BASE}/api/v1/export/applications/csv${status ? `?status=${status}` : ""}`,
     excelUrl: (status?: string) => `${API_BASE}/api/v1/export/applications/excel${status ? `?status=${status}` : ""}`,
     jobTrackerUrl: () => `${API_BASE}/api/v1/export/job-tracker`,
+  },
+  // Portal capability matrix
+  portals: {
+    list: () => request<{ portals: PortalCapability[] }>("/portals"),
   },
   // Session-based authentication
   sessions: {
