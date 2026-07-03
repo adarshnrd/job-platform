@@ -25,6 +25,10 @@ from scrapers.weworkremotely import WeWorkRemotelyScraper
 from scrapers.glassdoor import GlassdoorScraper
 from scrapers.dice import DiceScraper
 from scrapers.ziprecruiter import ZipRecruiterScraper
+from scrapers.iimjobs import IimjobsScraper
+from scrapers.timesjobs import TimesJobsScraper
+from scrapers.shine import ShineScraper
+from scrapers.freshersworld import FreshersworldScraper
 # API-first sources — stable, no browser
 from scrapers.remotive import RemotiveScraper
 from scrapers.arbeitnow import ArbeitnowScraper
@@ -56,6 +60,10 @@ SOURCE_REGISTRY: dict[str, Source] = {
     "indeed":         Source("indeed", IndeedScraper, False, False, {"india", "global"}, login_capable=True),
     "instahyre":      Source("instahyre", InstahyreScraper, False, False, {"india"}, login_capable=True),
     "hirist":         Source("hirist", HiristScraper, False, False, {"india"}),
+    "iimjobs":        Source("iimjobs", IimjobsScraper, False, False, {"india"}),
+    "timesjobs":      Source("timesjobs", TimesJobsScraper, False, False, {"india"}),
+    "shine":          Source("shine", ShineScraper, False, False, {"india"}),
+    "freshersworld":  Source("freshersworld", FreshersworldScraper, False, False, {"india"}),
     "cutshort":       Source("cutshort", CutshortScraper, False, False, {"india"}),
     "foundit":        Source("foundit", FounditScraper, False, False, {"india"}),
     "wellfound":      Source("wellfound", WellfoundScraper, False, False, {"india", "global"}),

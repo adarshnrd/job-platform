@@ -80,7 +80,8 @@
       "Bash(git check-ignore *)",
       "Bash(git rm *)",
       "Bash(echo \"TSC EXIT: $?\")",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(echo \"TSC DONE \\(exit $?\\)\")"
     ]
   }
 }

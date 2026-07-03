@@ -11,6 +11,7 @@ from services.sessions.adapters.instahyre import InstahyreAdapter
 from services.sessions.adapters.foundit import FounditAdapter
 from services.sessions.adapters.hirist import HiristAdapter
 from services.sessions.adapters.cutshort import CutshortAdapter
+from services.sessions.adapters.iimjobs import IimjobsAdapter
 
 ADAPTERS: dict[str, type[BaseSessionAdapter]] = {
     "linkedin": LinkedInAdapter,
@@ -19,6 +20,7 @@ ADAPTERS: dict[str, type[BaseSessionAdapter]] = {
     "foundit": FounditAdapter,
     "hirist": HiristAdapter,
     "cutshort": CutshortAdapter,
+    "iimjobs": IimjobsAdapter,
 }
 
 PLATFORM_META: dict[str, dict] = {
@@ -70,6 +72,13 @@ PLATFORM_META: dict[str, dict] = {
         "login_url": "https://cutshort.io/login",
         "default_session_lifetime_days": 30,
         "description": "AI-matched startup roles (assessments handled manually)",
+    },
+    "iimjobs": {
+        "display_name": "iimjobs",
+        "icon": "iimjobs",
+        "login_url": "https://www.iimjobs.com/login",
+        "default_session_lifetime_days": 21,
+        "description": "Management & senior roles",
     },
 }
 
