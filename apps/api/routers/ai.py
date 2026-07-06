@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from pydantic import BaseModel
 from database import get_db
-from services.ai import analyze_skill_gaps, generate_cover_letter, call_llm, get_usage_stats
+from services.ai import analyze_skill_gaps, generate_cover_letter, call_llm, get_usage_stats, llm_feature_scope
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -43,7 +43,8 @@ Skills: {', '.join(user.get('skills', [])[:20])}.
 Location: {user.get('location', 'India')}.
 Be concise, practical, and encouraging. Use markdown formatting."""
 
-    response = call_llm(system, body.message, max_tokens=800, task_type="conversation")
+    with llm_feature_scope("copilot"):
+        response = call_llm(system, body.message, max_tokens=800, task_type="conversation")
     return {"response": response}
 
 

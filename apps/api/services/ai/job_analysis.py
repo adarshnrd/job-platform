@@ -12,6 +12,7 @@ from services.ai.provider import (
     _call_llm,
     parse_json_response as _parse_json_response,
     process_single_job as _process_single_job,
+    llm_feature,
 )
 
 
@@ -157,6 +158,7 @@ def _merge_scores(r1: dict, r2: dict) -> dict:
 #  SINGLE-CALL WRAPPERS
 # ══════════════════════════════════════════════════════════════
 
+@llm_feature("jd_parsing")
 def parse_job_description(jd_text: str) -> dict:
     system = """You are an expert recruiter AI that extracts structured data from job descriptions.
 Always respond with valid JSON only — no markdown, no prose."""
@@ -168,6 +170,7 @@ Always respond with valid JSON only — no markdown, no prose."""
         return _empty_jd_parse()
 
 
+@llm_feature("job_scoring")
 def compute_match_score(user_profile: dict, jd_parsed: dict, jd_text: str) -> dict:
     system = """You are an expert career AI that evaluates candidate-job fit.
 Be honest, precise, and practical. Always respond with valid JSON only."""
@@ -184,6 +187,7 @@ Be honest, precise, and practical. Always respond with valid JSON only."""
 #  BATCH OPERATIONS
 # ══════════════════════════════════════════════════════════════
 
+@llm_feature("jd_parsing")
 async def batch_parse_jds(jd_texts: list[str]) -> list[dict]:
     available = _available_providers()
     if not available:
@@ -211,6 +215,7 @@ Always respond with valid JSON only — no markdown, no prose."""
     return results
 
 
+@llm_feature("job_scoring")
 async def batch_score_jobs(
     user_profile: dict,
     jobs: list[tuple[dict, str]],

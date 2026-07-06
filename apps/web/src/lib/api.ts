@@ -12,6 +12,13 @@ import type {
   PortalCapability,
   SavedAnswer,
   PendingQuestion,
+  DiscoveryRun,
+  DiscoveryEvent,
+  DiscoverySource,
+  RecentDiscoveryJob,
+  TelemetryRun,
+  SourceHealth,
+  AiUsageSummary,
 } from "@/types";
 
 /** Partial<User> that also allows null so callers can explicitly clear a column. */
@@ -39,7 +46,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || "Request failed");
+    // FastAPI can return detail as an object or a list (e.g. 422 validation
+    // errors) — Error(object) would render as "[object Object]" in toasts.
+    let detail = err.detail ?? err;
+    if (typeof detail !== "string") {
+      detail = Array.isArray(detail)
+        ? detail.map((d: any) => d?.msg || JSON.stringify(d)).join("; ")
+        : JSON.stringify(detail);
+    }
+    throw new Error(detail || "Request failed");
   }
   return res.json();
 }
@@ -48,7 +63,10 @@ export const api = {
   // Applications
   applications: {
     list: (params?: Record<string, string>) =>
-      request<{ data: Application[]; total: number; offset: number; limit: number }>(`/applications?${new URLSearchParams(params).toString()}`),
+      request<{
+        data: Application[]; total: number; offset: number; limit: number;
+        counts?: { active: number; history: number; archived: number };
+      }>(`/applications?${new URLSearchParams(params).toString()}`),
     pipeline: () => request<{ columns: KanbanColumn[]; stats: PipelineStats; pipeline?: KanbanColumn[] }>("/applications/pipeline"),
     get: (id: string) => request<Application>(`/applications/${id}`),
     update: (id: string, data: Partial<Application>) =>
@@ -102,7 +120,8 @@ export const api = {
       request<{ data: Application[]; total: number; offset: number; limit: number; matched?: number }>(`/jobs?${new URLSearchParams(params).toString()}`),
     get: (id: string) => request<Application | JobListing>(`/jobs/${id}`),
     score: (id: string) => request<{ success: boolean; match_score: number; tier: string; analysis: Record<string, unknown> }>(`/jobs/${id}/score`, { method: "POST" }),
-    discover: (data: Record<string, unknown>) => request<{ success: boolean; message: string }>("/jobs/discover", { method: "POST", body: JSON.stringify(data) }),
+    discover: (data: Record<string, unknown>) =>
+      request<{ success: boolean; message: string; run_id: string; already_running: boolean }>("/jobs/discover", { method: "POST", body: JSON.stringify(data) }),
     reportExpired: (jobListingId: string) =>
       request<{ success: boolean }>(`/jobs/${jobListingId}/report-expired`, { method: "POST", body: JSON.stringify({}) }),
   },
@@ -156,8 +175,12 @@ export const api = {
   // Approval queue
   approval: {
     pending: () => request<Application[]>("/applications/pending-approval"),
-    approve: (id: string) => request<{ success: boolean }>(`/applications/${id}/approve`, { method: "POST" }),
+    approve: (id: string) =>
+      request<{ success: boolean; mode: "auto" | "assisted" | "expired"; message: string }>(`/applications/${id}/approve`, { method: "POST" }),
     dismiss: (id: string) => request<{ success: boolean }>(`/applications/${id}/dismiss`, { method: "POST" }),
+    manualApply: () => request<Application[]>("/applications/manual-apply"),
+    markManualApplied: (id: string) =>
+      request<{ success: boolean }>(`/applications/${id}/mark-manual-applied`, { method: "POST" }),
   },
   // AI Career Copilot
   copilot: {
@@ -195,6 +218,28 @@ export const api = {
       }),
     skipPending: (pendingId: string) =>
       request<{ success: boolean }>(`/answers/pending/${pendingId}/skip`, { method: "POST", body: JSON.stringify({}) }),
+  },
+  // Discovery activity (Search Activity page)
+  discovery: {
+    sources: () => request<{ sources: DiscoverySource[] }>("/discovery/sources"),
+    status: () => request<{ active: boolean; run: DiscoveryRun | null }>("/discovery/status"),
+    runs: () => request<{ runs: DiscoveryRun[] }>("/discovery/runs"),
+    events: (runId: string, after = 0) =>
+      request<{ run_id: string; events: DiscoveryEvent[]; last_seq: number; live: boolean }>(
+        `/discovery/events?run_id=${runId}&after=${after}`
+      ),
+    recent: (window: string) =>
+      request<{ window: string; count: number; jobs: RecentDiscoveryJob[] }>(`/discovery/recent?window=${window}`),
+  },
+  // Mission-control telemetry (run ledger, scraper health, AI usage)
+  telemetry: {
+    runs: (kind?: "discovery" | "apply", limit = 30) =>
+      request<{ runs: TelemetryRun[] }>(
+        `/telemetry/runs?limit=${limit}${kind ? `&kind=${kind}` : ""}`
+      ),
+    sourceHealth: (days = 14) =>
+      request<{ days: number; sources: SourceHealth[] }>(`/telemetry/source-health?days=${days}`),
+    aiUsage: (days = 14) => request<AiUsageSummary>(`/telemetry/ai-usage?days=${days}`),
   },
   // Session-based authentication
   sessions: {

@@ -32,7 +32,7 @@ def _run_discovery_all_users():
     still browsing/discovering manually.
     """
     from database import get_supabase_admin
-    from workers.job_discovery import run_discovery_for_user
+    from workers.job_discovery import infer_region, run_discovery_for_user
 
     try:
         db = get_supabase_admin()
@@ -48,10 +48,9 @@ def _run_discovery_all_users():
             if user.get("auto_discovery_enabled") is False:
                 continue
             user_id = user["id"]
-            locations = user.get("preferred_locations") or ["India"]
-            region = "india" if any("india" in loc.lower() for loc in locations) else "global"
+            region = infer_region(user.get("preferred_locations"))
             try:
-                run_discovery_for_user(user_id, region)
+                run_discovery_for_user(user_id, region, trigger="scheduled")
             except Exception as e:
                 logger.error(f"Scheduled discovery failed for {user_id}: {e}")
     except Exception as e:
@@ -66,8 +65,12 @@ def _process_apply_queue():
     Also re-queues rate_limited items whose cap has reset (new day).
     """
     import time
+    from collections import defaultdict
+    from datetime import datetime, timezone
+
     from database import get_supabase_admin
     from workers.application_bot import apply_single_job
+    from services import telemetry
     from services.rate_limiter import rate_limiter
 
     try:
@@ -106,14 +109,20 @@ def _process_apply_queue():
 
         logger.info(f"Processing {len(items)} pending apply queue items (rate-limited)")
         applied_count = 0
+        batch_started = datetime.now(timezone.utc).isoformat()
+        user_counts: dict[str, dict] = defaultdict(
+            lambda: {"attempted": 0, "applied": 0, "rate_limited": 0, "failed": 0}
+        )
 
         for item in items:
             platform = platform_map.get(item["application_id"], "")
             user_id = item["user_id"]
+            user_counts[user_id]["attempted"] += 1
 
             allowed, reason = rate_limiter.can_apply(user_id, platform)
             if not allowed:
                 logger.info(f"Skipping {item['id'][:8]}…: {reason}")
+                user_counts[user_id]["rate_limited"] += 1
                 db.table("apply_queue").update({
                     "status": "rate_limited",
                     "error_msg": reason,
@@ -123,7 +132,9 @@ def _process_apply_queue():
             try:
                 apply_single_job(item["id"])
                 applied_count += 1
+                user_counts[user_id]["applied"] += 1
             except Exception as e:
+                user_counts[user_id]["failed"] += 1
                 logger.error(f"Apply queue item {item['id']} failed: {e}")
 
             # Randomized delay before next application
@@ -136,6 +147,10 @@ def _process_apply_queue():
             time.sleep(delay)
 
         logger.info(f"Apply queue batch done: {applied_count}/{len(items)} processed")
+
+        batch_finished = datetime.now(timezone.utc).isoformat()
+        for user_id, counts in user_counts.items():
+            telemetry.record_apply_run(user_id, batch_started, batch_finished, counts)
 
     except Exception as e:
         logger.error(f"Apply queue drain failed: {e}")

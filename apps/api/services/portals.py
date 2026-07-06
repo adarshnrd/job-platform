@@ -199,6 +199,27 @@ def get_portal(name: str) -> PortalCapabilities | None:
     return PORTALS.get(resolve_portal_key(name))
 
 
+def normalize_job_url(url: str) -> str:
+    """Canonicalize a job URL for dedup.
+
+    - angel.co → wellfound.com (angel.co 301-redirects there), so the same role
+      scraped from either host collapses onto one listing.
+    - drops tracking query params and trailing slashes.
+    Unknown URLs are returned trimmed but otherwise unchanged.
+    """
+    if not url:
+        return url
+    u = url.strip()
+    u = u.replace("://angel.co", "://wellfound.com").replace("://www.angel.co", "://www.wellfound.com")
+    # Strip query string / fragment (job URLs are stable without them).
+    for sep in ("?", "#"):
+        if sep in u:
+            u = u.split(sep, 1)[0]
+    if u.endswith("/") and len(u) > len("https://x/"):
+        u = u.rstrip("/")
+    return u
+
+
 def list_portals() -> list[dict]:
     """Full capability matrix for the frontend, annotated with live wiring state."""
     # Imported lazily to avoid a circular import at module load.

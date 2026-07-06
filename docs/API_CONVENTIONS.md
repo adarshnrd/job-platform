@@ -123,6 +123,18 @@ Session-based auth for job platforms (LinkedIn, Naukri, etc.):
 | POST | `/sessions/:platform/refresh` | Refresh session validity |
 | DELETE | `/sessions/:platform` | Disconnect platform |
 
+### Telemetry (`/telemetry`)
+
+Mission-control observability — durable run ledger, scraper health, LLM usage. Backed by a local SQLite database (`apps/api/data/telemetry.db`), populated automatically by discovery/apply runs and every LLM call.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/telemetry/runs` | Run ledger with per-source breakdowns (`kind=discovery\|apply`, `limit`) |
+| GET | `/telemetry/source-health` | Per-scraper daily yields, error rates, degradation flags (`days`, default 14) |
+| GET | `/telemetry/ai-usage` | LLM usage by provider/feature, daily series, budget status (`days`) |
+
+Daily LLM budgets are configured via `LLM_DAILY_TOKEN_BUDGET` / `LLM_DAILY_BUDGET_USD` in `.env` (0 = unlimited). Once exceeded, all LLM calls hard-stop until midnight UTC and `budget.exceeded` turns true in `/telemetry/ai-usage`.
+
 ## Database Views
 
 ### `application_details`

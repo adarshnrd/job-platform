@@ -142,6 +142,14 @@ class SessionService:
             }
 
         session = result.data
+        # Report wall-clock expiry immediately — don't wait for the scheduled
+        # health check to flip the stored row. Keeps the "Connected" badge honest.
+        if session["status"] == "active" and self._health._is_expired(session):
+            try:
+                self._health._mark_expired(session)
+            except Exception:
+                pass
+            session["status"] = "expired"
         health = self._compute_health(session)
 
         return {
@@ -177,6 +185,13 @@ class SessionService:
         for platform_name, meta in PLATFORM_META.items():
             if platform_name in connected:
                 session = connected[platform_name]
+                # Same wall-clock expiry correction as get_status.
+                if session["status"] == "active" and self._health._is_expired(session):
+                    try:
+                        self._health._mark_expired(session)
+                    except Exception:
+                        pass
+                    session["status"] = "expired"
                 sessions.append({
                     "platform": platform_name,
                     "display_name": meta.get("display_name", platform_name.title()),

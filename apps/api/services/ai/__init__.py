@@ -5,8 +5,11 @@ Import from here (e.g. `from services.ai import call_llm`) or from submodules
 directly (e.g. `from services.ai.provider import call_llm`).
 """
 from services.ai.provider import (  # noqa: F401
+    BudgetExceededError,
     call_llm,
     get_usage_stats,
+    llm_feature,
+    llm_feature_scope,
     parse_json_response,
     parse_json_response as _parse_json_response,
 )

@@ -3,9 +3,10 @@ Interview Prep & Career Analysis — interview preparation, skill gaps, follow-u
 """
 import json
 from loguru import logger
-from services.ai.provider import _call_llm, parse_json_response as _parse_json_response
+from services.ai.provider import _call_llm, llm_feature, parse_json_response as _parse_json_response
 
 
+@llm_feature("interview_prep")
 def generate_interview_prep(user_profile: dict, job: dict, match_analysis: dict) -> dict:
     system = """You are an expert interview coach. Generate practical, specific interview preparation material.
 Respond with valid JSON only."""
@@ -64,6 +65,7 @@ Return JSON:
         }
 
 
+@llm_feature("skill_gaps")
 def analyze_skill_gaps(user_profile: dict, recent_jds: list[dict]) -> dict:
     system = "You are a career development AI. Analyze skill gaps and give actionable advice. JSON only."
 
@@ -118,6 +120,7 @@ Return JSON:
         return {"missing_skills": [], "trending_skills": [], "market_insights": {}, "priority_recommendations": []}
 
 
+@llm_feature("follow_up")
 def generate_follow_up_email(user_profile: dict, job: dict, days_since_applied: int) -> dict:
     system = """You are an expert career coach. Write concise, professional follow-up emails.
 Keep them under 150 words. Be polite, specific, and end with a clear call to action. Return JSON only."""

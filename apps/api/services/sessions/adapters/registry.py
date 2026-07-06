@@ -12,6 +12,7 @@ from services.sessions.adapters.foundit import FounditAdapter
 from services.sessions.adapters.hirist import HiristAdapter
 from services.sessions.adapters.cutshort import CutshortAdapter
 from services.sessions.adapters.iimjobs import IimjobsAdapter
+from services.sessions.adapters.ycombinator import YCombinatorAdapter
 
 ADAPTERS: dict[str, type[BaseSessionAdapter]] = {
     "linkedin": LinkedInAdapter,
@@ -21,6 +22,7 @@ ADAPTERS: dict[str, type[BaseSessionAdapter]] = {
     "hirist": HiristAdapter,
     "cutshort": CutshortAdapter,
     "iimjobs": IimjobsAdapter,
+    "ycombinator": YCombinatorAdapter,
 }
 
 PLATFORM_META: dict[str, dict] = {
@@ -79,6 +81,13 @@ PLATFORM_META: dict[str, dict] = {
         "login_url": "https://www.iimjobs.com/login",
         "default_session_lifetime_days": 21,
         "description": "Management & senior roles",
+    },
+    "ycombinator": {
+        "display_name": "Y Combinator",
+        "icon": "ycombinator",
+        "login_url": "https://www.workatastartup.com/login",
+        "default_session_lifetime_days": 30,
+        "description": "Work at a Startup — YC company roles",
     },
 }
 

@@ -6,7 +6,8 @@ import { Application, ApplicationStatus } from "@/types";
 import { STATUS_CONFIG, PLATFORM_LABELS, formatSalary, timeAgo, scoreColor, cn } from "@/lib/utils";
 import {
   Star, ExternalLink, BookOpen, ChevronDown, Download,
-  FileSpreadsheet, FileText, Search, RefreshCw, Bot, Send, Clock, CheckCircle, AlertTriangle
+  FileSpreadsheet, FileText, Search, RefreshCw, Bot, Send, Clock, CheckCircle, AlertTriangle,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import Link from "next/link";
@@ -40,12 +41,46 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "rejected", label: "Rejected" },
 ];
 
+type Bucket = "active" | "history" | "archived";
+
+const BUCKET_TABS: { key: Bucket; label: string; hint: string }[] = [
+  { key: "active", label: "Active", hint: "Jobs you can still act on" },
+  { key: "history", label: "History", hint: "Everything you've applied to" },
+  { key: "archived", label: "Archived", hint: "Expired, removed, or dismissed" },
+];
+
+type SortColumn = "status" | "score" | "platform" | "date";
+type SortDir = "asc" | "desc";
+
+const SORTABLE_COLUMNS: { key: SortColumn; label: string }[] = [
+  { key: "status", label: "Status" },
+  { key: "score", label: "Score" },
+  { key: "platform", label: "Platform" },
+  { key: "date", label: "Date" },
+];
+
+const MIN_SCORE_OPTIONS: { value: number; label: string }[] = [
+  { value: 50, label: "Score ≥ 50%" },
+  { value: 60, label: "Score ≥ 60%" },
+  { value: 70, label: "Score ≥ 70%" },
+  { value: 80, label: "Score ≥ 80%" },
+  { value: 0, label: "All scores" },
+];
+
 export function ApplicationsClient({ userId }: { userId: string }) {
   const [apps, setApps] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterStarred, setFilterStarred] = useState(false);
+  const [bucket, setBucket] = useState<Bucket>("active");
+  const [counts, setCounts] = useState<{ active: number; history: number; archived: number } | null>(null);
+  // Tri-state column-header sort: null column = bucket's default ordering.
+  const [sortCol, setSortCol] = useState<SortColumn | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [minScore, setMinScore] = useState(50);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [generatingCover, setGeneratingCover] = useState<string | null>(null);
@@ -69,11 +104,18 @@ export function ApplicationsClient({ userId }: { userId: string }) {
   const load = async () => {
     setLoading(true);
     try {
-      const params: Record<string, string> = {};
+      const params: Record<string, string> = {
+        bucket,
+        min_score: String(minScore),
+      };
+      if (sortCol) { params.sort_by = sortCol; params.sort_dir = sortDir; }
       if (filterStatus) params.status = filterStatus;
       if (filterStarred) params.is_starred = "true";
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
       const data = await api.applications.list(params);
       setApps(data.data || []);
+      if (data.counts) setCounts(data.counts);
     } catch (e: any) {
       toast.error(e.message || "Failed to load");
     } finally {
@@ -81,7 +123,15 @@ export function ApplicationsClient({ userId }: { userId: string }) {
     }
   };
 
-  useEffect(() => { load(); }, [filterStatus, filterStarred]);
+  useEffect(() => { load(); }, [filterStatus, filterStarred, bucket, sortCol, sortDir, minScore, dateFrom, dateTo]);
+
+  // Tri-state cycle per column: unsorted → asc → desc → unsorted. Clicking a
+  // different column always starts that column fresh at asc.
+  const handleSort = (col: SortColumn) => {
+    if (sortCol !== col) { setSortCol(col); setSortDir("asc"); return; }
+    if (sortDir === "asc") { setSortDir("desc"); return; }
+    setSortCol(null);
+  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -176,6 +226,27 @@ export function ApplicationsClient({ userId }: { userId: string }) {
         </div>
       </div>
 
+      {/* Lifecycle tabs */}
+      <div className="flex rounded-lg border border-zinc-800 overflow-hidden w-fit">
+        {BUCKET_TABS.map(t => (
+          <button key={t.key} onClick={() => setBucket(t.key)} title={t.hint}
+            className={cn(
+              "px-4 py-2 text-sm flex items-center gap-2 transition-colors",
+              bucket === t.key
+                ? "bg-amber-500/10 text-amber-400 font-semibold"
+                : "bg-zinc-900 text-zinc-400 hover:text-zinc-100"
+            )}>
+            {t.label}
+            {counts && (
+              <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full",
+                bucket === t.key ? "bg-amber-500/20" : "bg-zinc-800")}>
+                {counts[t.key]}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-56">
@@ -183,6 +254,11 @@ export function ApplicationsClient({ userId }: { userId: string }) {
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search title or company..." className="input pl-9 text-sm" />
         </div>
+        {bucket === "active" && (
+          <select value={minScore} onChange={e => setMinScore(Number(e.target.value))} className="input w-auto text-sm">
+            {MIN_SCORE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        )}
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="input w-auto text-sm">
           {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -190,6 +266,22 @@ export function ApplicationsClient({ userId }: { userId: string }) {
           className={cn("flex items-center gap-2 btn-secondary text-sm", filterStarred ? "border-amber-500/50 text-amber-400" : "")}>
           <Star size={13} fill={filterStarred ? "currentColor" : "none"} /> Starred
         </button>
+        <div className="flex items-center gap-1.5">
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            max={dateTo || undefined}
+            title="From date" className="input w-auto text-sm" />
+          <span className="text-xs text-zinc-500">–</span>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            min={dateFrom || undefined}
+            title="To date" className="input w-auto text-sm" />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }}
+              title="Clear date filter"
+              className="text-zinc-500 hover:text-zinc-200 text-xs px-1.5">
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -207,10 +299,25 @@ export function ApplicationsClient({ userId }: { userId: string }) {
             <thead>
               <tr className="border-b border-zinc-800 text-xs text-zinc-500 uppercase tracking-wider">
                 <th className="text-left px-4 py-3 font-medium">Role</th>
-                <th className="text-left px-4 py-3 font-medium">Status</th>
-                <th className="text-left px-4 py-3 font-medium">Score</th>
-                <th className="text-left px-4 py-3 font-medium">Platform</th>
-                <th className="text-left px-4 py-3 font-medium">Date</th>
+                {SORTABLE_COLUMNS.map(col => {
+                  const active = sortCol === col.key;
+                  const Icon = active ? (sortDir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+                  return (
+                    <th key={col.key} className="text-left px-4 py-3 font-medium">
+                      <button
+                        onClick={() => handleSort(col.key)}
+                        className={cn(
+                          "flex items-center gap-1 uppercase tracking-wider text-xs font-medium transition-colors",
+                          active ? "text-amber-400" : "text-zinc-500 hover:text-zinc-300"
+                        )}
+                        title={active ? `Sorted ${sortDir === "asc" ? "ascending" : "descending"} — click to ${sortDir === "asc" ? "reverse" : "clear"}` : `Sort by ${col.label}`}
+                      >
+                        {col.label}
+                        <Icon size={12} className={active ? "" : "opacity-40"} />
+                      </button>
+                    </th>
+                  );
+                })}
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -230,6 +337,11 @@ export function ApplicationsClient({ userId }: { userId: string }) {
                         <div>
                           <p className="text-sm font-medium">{app.job_title}</p>
                           <p className="text-xs text-zinc-500">{app.job_company}</p>
+                          {bucket === "archived" && (
+                            <p className="text-[10px] text-red-400/80 mt-0.5">
+                              {app.status === "withdrawn" ? "Dismissed by you" : app.job_expiry_reason || "Listing no longer available"}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -258,7 +370,14 @@ export function ApplicationsClient({ userId }: { userId: string }) {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                        {app.status !== "applied" && app.status !== "offer_received" && app.status !== "rejected" && (
+                        {app.status === "needs_input" && (
+                          <Link href="/answers"
+                            title="This application is paused on questions only you can answer"
+                            className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 transition-colors">
+                            <AlertTriangle size={12} /> Answer now
+                          </Link>
+                        )}
+                        {app.status !== "applied" && app.status !== "offer_received" && app.status !== "rejected" && bucket !== "archived" && (
                           <button onClick={() => setApplyTarget(app)}
                             title="Assisted apply"
                             className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-colors">
