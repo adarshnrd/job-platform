@@ -1,6 +1,6 @@
 export type ApplicationStatus =
   | "discovered" | "matched" | "queued" | "applying" | "applied"
-  | "needs_input"
+  | "needs_input" | "manual_apply"
   | "under_review" | "assessment" | "interview_scheduled"
   | "technical_round" | "hr_round" | "offer_received"
   | "rejected" | "withdrawn" | "accepted";
@@ -8,7 +8,17 @@ export type ApplicationStatus =
 export type MatchTier = "auto_apply" | "recommended" | "watchlist" | "archived";
 export type WorkMode = "remote" | "hybrid" | "onsite";
 export type JobType = "full_time" | "part_time" | "contract" | "freelance" | "internship";
-export type Platform = "linkedin" | "naukri" | "indeed" | "wellfound" | "hirist" | "instahyre" | "cutshort" | "glassdoor" | "foundit" | "remoteok" | "weworkremotely" | "iimjobs" | "timesjobs" | "shine" | "freshersworld" | "ycombinator" | "company_portal" | "other";
+export type Platform = "linkedin" | "naukri" | "indeed" | "wellfound" | "hirist" | "instahyre" | "cutshort" | "glassdoor" | "foundit" | "remoteok" | "weworkremotely" | "iimjobs" | "timesjobs" | "shine" | "freshersworld" | "ycombinator" | "dice" | "ziprecruiter" | "remotive" | "arbeitnow" | "themuse" | "adzuna" | "jooble" | "jsearch" | "company_portal" | "other";
+
+export interface DiscoverySource {
+  name: Platform;
+  regions: string[];
+  api_based: boolean;
+  requires_key: boolean;
+  key_configured: boolean | null;
+  login_capable: boolean;
+  discoverable: boolean;
+}
 
 export interface User {
   id: string;
@@ -266,4 +276,133 @@ export interface InterviewPrep {
   salary_negotiation: Record<string, any>;
   total_questions: number;
   completed_questions: number;
+}
+
+// ── Discovery activity (Search Activity page) ──
+export type DiscoveryPhase =
+  | "initializing" | "searching" | "analyzing" | "scoring" | "saving"
+  | "completed" | "failed";
+
+export interface DiscoverySourceState {
+  status: "pending" | "searching" | "done" | "error";
+  jobs_found: number;
+  jobs_seen?: number;
+  duration_ms?: number;
+  error: string | null;
+}
+
+export interface DiscoveryRun {
+  run_id: string;
+  user_id: string;
+  region: string;
+  trigger: "manual" | "scheduled";
+  status: "running" | "completed" | "failed";
+  phase: DiscoveryPhase;
+  started_at: string;
+  finished_at: string | null;
+  current_source: string | null;
+  current_query: string | null;
+  sources: Record<string, DiscoverySourceState>;
+  counts: { scraped: number; evaluated: number; matched: number; queued: number };
+  error: string | null;
+}
+
+export interface DiscoveryEvent {
+  seq: number;
+  ts: string;
+  level: "info" | "success" | "error";
+  message: string;
+}
+
+export interface RecentDiscoveryJob {
+  id: string;
+  job_title: string;
+  job_company: string;
+  source_platform: string;
+  job_location: string | null;
+  match_score: number | null;
+  match_tier: string | null;
+  status: string;
+  created_at: string;
+}
+
+// ── Mission-control telemetry (run ledger, scraper health, AI usage) ──
+
+export interface TelemetryRunSource {
+  source: string;
+  status: string | null;
+  jobs_found: number;
+  jobs_seen: number;
+  duration_ms: number;
+  error: string | null;
+  finished_at: string;
+}
+
+export interface TelemetryRun {
+  run_id: string;
+  kind: "discovery" | "apply";
+  user_id: string;
+  trigger: string | null;
+  region: string | null;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  duration_ms: number | null;
+  counts: Record<string, number>;
+  error: string | null;
+  sources: TelemetryRunSource[];
+}
+
+export interface SourceHealthDay {
+  day: string;
+  jobs_seen: number;
+  errors: number;
+  runs: number;
+}
+
+export interface SourceHealth {
+  source: string;
+  runs: number;
+  errors: number;
+  success_rate: number | null;
+  baseline_yield: number;
+  flagged: boolean;
+  flag_reason: "insufficient_data" | "consecutive_errors" | "yield_drop" | null;
+  latest: {
+    status: string | null;
+    jobs_seen: number;
+    jobs_found: number;
+    duration_ms: number;
+    error: string | null;
+    finished_at: string;
+  };
+  daily: SourceHealthDay[];
+}
+
+export interface AiUsageBucket {
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+
+export interface AiUsageSummary {
+  date: string;
+  today: {
+    calls: number;
+    input_tokens: number;
+    output_tokens: number;
+    tokens: number;
+    cost_usd: number;
+  };
+  providers: Record<string, AiUsageBucket>;
+  features: Record<string, AiUsageBucket>;
+  daily: Array<{ day: string; calls: number; tokens: number; cost_usd: number }>;
+  budget: {
+    token_budget: number;
+    usd_budget: number;
+    tokens_used: number;
+    cost_used: number;
+    exceeded: boolean;
+  };
 }

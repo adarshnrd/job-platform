@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Briefcase, FileText, BookOpen,
-  BarChart3, Settings, LogOut, CheckCircle, Bot, KeyRound, Bell, MessageSquareText,
+  BarChart3, Settings, LogOut, CheckCircle, Bot, KeyRound, Bell, MessageSquareText, Activity,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -13,6 +13,7 @@ const NAV = [
   { href: "/dashboard",    icon: LayoutDashboard, label: "Pipeline" },
   { href: "/jobs",         icon: Briefcase,        label: "Jobs" },
   { href: "/applications", icon: BarChart3,        label: "Applications" },
+  { href: "/activity",     icon: Activity,         label: "Search Activity" },
   { href: "/approve",      icon: CheckCircle,      label: "Approve Jobs" },
   { href: "/answers",      icon: MessageSquareText, label: "Answer Bank" },
   { href: "/copilot",      icon: Bot,              label: "AI Copilot",  badge: "AI" },

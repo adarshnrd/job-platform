@@ -3,7 +3,7 @@ Content Generation — cover letters, screening answers, resume tailoring.
 """
 import re
 from loguru import logger
-from services.ai.provider import _call_llm, parse_json_response as _parse_json_response
+from services.ai.provider import _call_llm, llm_feature, parse_json_response as _parse_json_response
 
 # Sentinel the AI must return when it lacks the real data to answer truthfully.
 NEEDS_INFO_TOKEN = "[NEEDS_INFO]"
@@ -51,6 +51,7 @@ def _clean(s: str) -> str:
     return s
 
 
+@llm_feature("cover_letter")
 def generate_cover_letter(user_profile: dict, job: dict, resume_summary: str) -> str:
     system = """You are an expert career coach who writes authentic cover letters.
 Write in first person. Be specific and concrete. Avoid clichés. Max 350 words.
@@ -95,6 +96,7 @@ achievements), (3) brief forward-looking close. Return only the letter text."""
         return ""
 
 
+@llm_feature("screening_answers")
 def answer_screening_question(question: str, user_profile: dict, job: dict, question_type: str = "text") -> str:
     system = f"""You answer job-application screening questions using ONLY facts explicitly
 provided about the candidate. This is a STRICT anti-fabrication task.
@@ -142,6 +144,7 @@ Answer using ONLY the data above. If a required fact is "(not provided)", output
         return f"{NEEDS_INFO_TOKEN} could not generate answer"
 
 
+@llm_feature("screening_answers")
 def draft_answer_for_user(question: str, user_profile: dict, job: dict, resume_summary: str = "") -> str:
     system = """You draft job-application answers for a candidate to review and edit.
 
@@ -196,6 +199,7 @@ Write the answer."""
         raise
 
 
+@llm_feature("screening_answers")
 def rephrase_answer(question: str, user_answer: str, user_profile: dict, job: dict) -> str:
     system = """You polish job-application answers. STRICT rules:
 
@@ -228,6 +232,7 @@ Rewrite the draft."""
         raise
 
 
+@llm_feature("resume_tailoring")
 def tailor_resume_content(parsed_resume: dict, jd_parsed: dict) -> dict:
     system = "You are an expert resume writer. Tailor resume content to match job requirements. JSON only."
 

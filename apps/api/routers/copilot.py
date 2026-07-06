@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from typing import Optional
 from loguru import logger
 from database import get_db
-from services.ai import call_llm
+from services.ai import call_llm, llm_feature_scope
 
 router = APIRouter(prefix="/copilot", tags=["copilot"])
 
@@ -85,7 +85,8 @@ async def chat(msg: ChatMessage, user_id: str = Depends(get_user_id)):
 
 User message: {msg.message}"""
 
-        response = call_llm(COPILOT_SYSTEM, user_prompt, max_tokens=1500)
+        with llm_feature_scope("copilot"):
+            response = call_llm(COPILOT_SYSTEM, user_prompt, max_tokens=1500)
         return {"response": response, "context": msg.context}
 
     except Exception as e:
@@ -139,7 +140,8 @@ Write a 3-paragraph cover letter that:
 
 Keep it under 250 words. Professional but warm tone. No generic filler."""
 
-        letter = call_llm(system, prompt, max_tokens=800)
+        with llm_feature_scope("cover_letter"):
+            letter = call_llm(system, prompt, max_tokens=800)
 
         # Save to application
         db.table("job_applications").update({"cover_letter": letter}).eq("id", app_id).execute()
@@ -164,7 +166,6 @@ async def analyze_resume(payload: dict, user_id: str = Depends(get_user_id)):
 
         user = user_res.data
         resume = resume_res.data or {}
-        parsed = resume.get("parsed_data", {}) or {}
 
         system = "You are a professional resume reviewer and ATS optimization expert."
         prompt = f"""Analyze this candidate's resume and provide detailed, actionable feedback:
@@ -188,7 +189,8 @@ Provide feedback in these sections:
 
 Be specific and direct. Reference real industry expectations."""
 
-        analysis = call_llm(system, prompt, max_tokens=1200)
+        with llm_feature_scope("resume_analysis"):
+            analysis = call_llm(system, prompt, max_tokens=1200)
         return {"analysis": analysis}
     except HTTPException:
         raise
@@ -239,7 +241,8 @@ Provide:
 4. **30-Day Action Plan** — concrete weekly tasks
 5. **Salary Unlock** — what these skills could add to your package (in LPA)"""
 
-        suggestions = call_llm(system, prompt, max_tokens=1200)
+        with llm_feature_scope("career_suggestions"):
+            suggestions = call_llm(system, prompt, max_tokens=1200)
         return {"suggestions": suggestions, "top_skill_gaps": top_gaps[:5]}
     except HTTPException:
         raise

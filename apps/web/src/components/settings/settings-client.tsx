@@ -3,23 +3,17 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { api } from "@/lib/api";
 import { User as UserIcon, Zap, Ban, X } from "lucide-react";
-import type { User, Platform } from "@/types";
+import type { User, Platform, DiscoverySource } from "@/types";
 import toast from "react-hot-toast";
 import { SessionConnections } from "./session-connections";
+import { PLATFORM_LABELS } from "@/lib/utils";
 
-const PLATFORMS: Platform[] = [
+// Fallback if the sources endpoint is unreachable — browser scrapers only.
+const FALLBACK_PLATFORMS: Platform[] = [
   "linkedin", "naukri", "indeed", "wellfound", "hirist", "instahyre",
-  "cutshort", "foundit", "glassdoor", "remoteok",
-  "weworkremotely",
+  "cutshort", "foundit", "iimjobs", "timesjobs", "shine", "freshersworld",
+  "glassdoor", "ycombinator", "dice", "ziprecruiter", "weworkremotely",
 ];
-
-const PLATFORM_LABELS: Record<string, string> = {
-  linkedin: "LinkedIn", naukri: "Naukri", indeed: "Indeed",
-  wellfound: "Wellfound", hirist: "Hirist.tech", instahyre: "Instahyre",
-  cutshort: "Cutshort", foundit: "Foundit (Monster)", glassdoor: "Glassdoor",
-  dice: "Dice", ziprecruiter: "ZipRecruiter", remoteok: "RemoteOK",
-  weworkremotely: "We Work Remotely",
-};
 
 export function SettingsClient({ profile, userId }: { profile: Partial<User>; userId: string }) {
   const [form, setForm] = useState({
@@ -44,10 +38,18 @@ export function SettingsClient({ profile, userId }: { profile: Partial<User>; us
   const [blacklistInput, setBlacklistInput] = useState("");
   const [skillExp, setSkillExp] = useState<Record<string, string>>({});
   const [savingSkills, setSavingSkills] = useState(false);
+  const [scraperSources, setScraperSources] = useState<Platform[]>(FALLBACK_PLATFORMS);
+  const [apiSources, setApiSources] = useState<DiscoverySource[]>([]);
 
   const supabase = createClient();
 
   useEffect(() => {
+    api.discovery.sources().then(({ sources }) => {
+      // Only discoverable browser scrapers are user-selectable; C-tier boards
+      // (hard bot-walls) are display/apply-only and excluded from the picker.
+      setScraperSources(sources.filter(s => !s.api_based && s.discoverable).map(s => s.name));
+      setApiSources(sources.filter(s => s.api_based && s.discoverable));
+    }).catch(() => {});
     api.automation.getBlacklist().then(data => {
       setBlacklist(data.map((d: any) => d.company_name));
     }).catch(() => {});
@@ -196,15 +198,33 @@ export function SettingsClient({ profile, userId }: { profile: Partial<User>; us
             <div className="flex justify-between text-xs text-zinc-600"><span>60%</span><span>100%</span></div>
           </div>
           <div>
-            <label className="label">Preferred Platforms</label>
+            <label className="label">Job Board Sources</label>
+            <p className="text-xs text-zinc-500 mb-2">
+              {form.preferred_platforms.length === 0
+                ? "All sources are searched (recommended). Select specific boards to narrow discovery to just those."
+                : `Discovery is narrowed to ${form.preferred_platforms.length} selected source${form.preferred_platforms.length > 1 ? "s" : ""} — clear the selection to search everything.`}
+            </p>
             <div className="flex flex-wrap gap-2">
-              {PLATFORMS.map(p => (
+              {scraperSources.map(p => (
                 <button key={p} type="button" onClick={() => togglePlatform(p)}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${form.preferred_platforms.includes(p) ? "bg-amber-500/10 border-amber-500/50 text-amber-300" : "border-zinc-700 text-zinc-400 hover:border-zinc-500"}`}>
                   {PLATFORM_LABELS[p] || p}
                 </button>
               ))}
             </div>
+            {apiSources.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs text-zinc-600 mb-1.5">API sources (always on when available):</p>
+                <div className="flex flex-wrap gap-2">
+                  {apiSources.map(s => (
+                    <span key={s.name} title={s.key_configured === false ? "Add the API key in the backend .env to activate" : undefined}
+                      className={`text-xs px-3 py-1.5 rounded-full border ${s.key_configured === false ? "border-zinc-800 text-zinc-600 line-through" : "border-emerald-500/30 text-emerald-400/80"}`}>
+                      {PLATFORM_LABELS[s.name] || s.name}{s.key_configured === false ? " — no key" : ""}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -239,7 +239,12 @@ async def _apply_job_async(queue_item_id: str):
                 app, user, resume_path, cover_letter, screening_answerer,
             )
         else:
-            result = {"success": False, "error": f"No adapter for platform: {platform}"}
+            # No automation path exists for this portal — retrying is pointless.
+            result = {
+                "success": False,
+                "error": f"No adapter for platform: {platform}",
+                "permanent": True,
+            }
 
     except (SessionNotFoundError, SessionExpiredError, SessionInvalidError) as e:
         logger.warning(f"Session auth failed for {platform}: {e}")
@@ -341,8 +346,15 @@ async def _apply_with_session(
 
 
 async def _apply_generic_portal(app, user, resume_path, cover_letter, screening_answerer):
-    """Generic company career portal application using AI form detection."""
+    """Generic company career portal application (RemoteOK/WWR external links, etc.).
+
+    Fills the standard identity fields, uploads the resume, and — this is the
+    Phase-4 upgrade — routes every detected form question through the Answer Bank
+    resolver so external forms get the same fill/pause behavior as native adapters.
+    Captures a confirmation screenshot best-effort.
+    """
     from playwright.async_api import async_playwright
+    from services.questions.schema import NEEDS_INFO_TOKEN
 
     result = {"success": False, "error": None}
     try:
@@ -368,12 +380,19 @@ async def _apply_generic_portal(app, user, resume_path, cover_letter, screening_
             if file_input and resume_path:
                 await file_input.set_input_files(resume_path)
 
+            # Answer Bank: resolve labeled questions (textareas + extra text inputs).
+            if screening_answerer:
+                await _fill_generic_questions(page, screening_answerer, NEEDS_INFO_TOKEN)
+
             submit_btn = await page.query_selector('button[type="submit"], input[type="submit"]')
             if submit_btn:
                 await submit_btn.click()
                 await asyncio.sleep(2)
                 result["success"] = True
                 result["applied_url"] = apply_url
+                shot = await _capture_confirmation(page, app)
+                if shot:
+                    result["screenshot_url"] = shot
 
             await browser.close()
     except Exception as e:
@@ -381,6 +400,50 @@ async def _apply_generic_portal(app, user, resume_path, cover_letter, screening_
         logger.error(f"Generic portal apply failed: {e}")
 
     return result
+
+
+async def _fill_generic_questions(page, screening_answerer, needs_info_token: str) -> None:
+    """Resolve and fill labeled textareas / non-identity text inputs on a generic form."""
+    try:
+        fields = await page.query_selector_all("textarea, input[type='text']")
+        for fld in fields:
+            try:
+                if await fld.input_value():
+                    continue
+                label = (
+                    await fld.get_attribute("aria-label")
+                    or await fld.get_attribute("placeholder")
+                    or await fld.get_attribute("name")
+                    or ""
+                ).strip()
+                # Skip the identity fields already handled above.
+                if not label or any(k in label.lower() for k in ("name", "email", "phone")):
+                    continue
+                answer = screening_answerer(label)
+                if answer and needs_info_token not in answer:
+                    await fld.fill(answer)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
+async def _capture_confirmation(page, app) -> str | None:
+    """Screenshot the post-submit page and upload to the screenshots bucket.
+    Best-effort — returns a storage path or None."""
+    try:
+        png = await page.screenshot(type="png", full_page=False)
+    except Exception:
+        return None
+    try:
+        from config import settings
+        bucket = settings.STORAGE_BUCKET_SCREENSHOTS
+        key = f"{app.get('user_id', 'unknown')}/{app.get('id', 'app')}-{int(__import__('time').time())}.png"
+        db.storage.from_(bucket).upload(key, png, {"content-type": "image/png", "upsert": "true"})
+        return key
+    except Exception as e:
+        logger.debug(f"Confirmation screenshot upload skipped: {e}")
+        return None
 
 
 def _pause_for_input(queue_item_id, application_id, user_id, user, app, platform, pending):
@@ -469,17 +532,44 @@ def _update_application_result(
             }).eq("id", queue_item_id).execute()
             return
 
-        db.table("job_applications").update({
-            "status": "matched",
-        }).eq("id", application_id).execute()
-
         if result.get("is_auth_failure"):
             error_msg = f"[SESSION_EXPIRED] {error_msg}"
 
+        # Permanent failures (no adapter) and exhausted retries move the
+        # application to the Manual Apply lane instead of back to 'matched' —
+        # resetting to 'matched' put it straight back into the approval queue,
+        # where the same doomed auto-apply would loop forever.
+        exhausted = result.get("permanent") or queue_item["attempts"] >= 2
+        if exhausted:
+            _set_manual_apply(application_id)
+        else:
+            # Retry still pending — keep it 'queued' so it doesn't reappear
+            # on the Approve Jobs page between attempts.
+            db.table("job_applications").update({
+                "status": "queued",
+            }).eq("id", application_id).execute()
+
         db.table("apply_queue").update({
-            "status": "failed" if queue_item["attempts"] >= 2 else "pending",
+            "status": "failed" if exhausted else "pending",
             "error_msg": error_msg,
         }).eq("id", queue_item_id).execute()
+
+
+def _set_manual_apply(application_id: str):
+    """Move an application to the Manual Apply lane.
+
+    Pre-migration safety: if the 'manual_apply' enum value doesn't exist yet
+    (database/10_manual_apply.sql not applied), fall back to 'matched' so the
+    bot keeps working — the job just stays in the approval queue as before.
+    """
+    try:
+        db.table("job_applications").update({"status": "manual_apply"}).eq("id", application_id).execute()
+    except Exception as e:
+        if "invalid input value for enum" in str(e).lower():
+            logger.warning("'manual_apply' enum value missing — run database/10_manual_apply.sql. Falling back to 'matched'.")
+            db.table("job_applications").update({"status": "matched"}).eq("id", application_id).execute()
+        else:
+            raise
 
 
 async def _download_resume(user_id: str) -> str | None:

@@ -44,8 +44,12 @@ class SessionHealthService:
 
         adapter = get_adapter(session["platform"])
         if adapter is None:
-            logger.warning(f"No adapter for platform {session['platform']}")
-            return False
+            # No adapter means we CAN'T verify the cookies — that's "unverifiable",
+            # not "invalid". Reporting False here made healthy sessions (e.g. Indeed)
+            # look broken the moment the user clicked Validate. Trust the session
+            # until its wall-clock expiry, which was already checked above.
+            logger.info(f"No adapter for {session['platform']} — skipping cookie validation, session unexpired")
+            return True
 
         try:
             cookies = self._encryption.decrypt_json(

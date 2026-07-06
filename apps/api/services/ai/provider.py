@@ -5,16 +5,20 @@ Routes calls across Groq, NVIDIA, and optionally Anthropic with task-based
 intelligent routing, automatic failover, and per-call token tracking.
 """
 import asyncio
+import functools
 import json
 import re
 import time
 from collections import defaultdict
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date
 from itertools import cycle
 from typing import Optional
 from loguru import logger
 import httpx
 from config import settings
+from services import telemetry
 
 
 # ══════════════════════════════════════════════════════════════
@@ -117,8 +121,82 @@ def _next_provider(task_type: str | None = None) -> str:
 
 
 # ══════════════════════════════════════════════════════════════
-#  TOKEN / COST TRACKING
+#  TOKEN / COST TRACKING & BUDGET
 # ══════════════════════════════════════════════════════════════
+
+# Which product feature the current LLM call belongs to (job_scoring,
+# cover_letter, copilot, …). Set via llm_feature()/llm_feature_scope() at the
+# feature entry point; propagates through async tasks created in that context.
+_FEATURE: ContextVar[str] = ContextVar("llm_feature", default="other")
+
+
+def llm_feature(name: str):
+    """Decorator — attribute every LLM call made inside the function to `name`."""
+    def deco(fn):
+        if asyncio.iscoroutinefunction(fn):
+            @functools.wraps(fn)
+            async def async_wrapper(*args, **kwargs):
+                token = _FEATURE.set(name)
+                try:
+                    return await fn(*args, **kwargs)
+                finally:
+                    _FEATURE.reset(token)
+            return async_wrapper
+
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            token = _FEATURE.set(name)
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                _FEATURE.reset(token)
+        return wrapper
+    return deco
+
+
+@contextmanager
+def llm_feature_scope(name: str):
+    """Context-manager form of llm_feature, for wrapping a single call site."""
+    token = _FEATURE.set(name)
+    try:
+        yield
+    finally:
+        _FEATURE.reset(token)
+
+
+class BudgetExceededError(RuntimeError):
+    """Raised before an LLM request when the daily token/cost budget is exhausted."""
+
+
+_budget_alert_day: str | None = None
+
+
+def _check_budget():
+    """Hard stop: refuse the call once today's usage passes the configured budget.
+
+    Both budgets default to 0 (= unlimited). Runs before every provider request,
+    so a mid-batch budget breach stops the remaining calls too.
+    """
+    global _budget_alert_day
+    token_budget = settings.LLM_DAILY_TOKEN_BUDGET
+    usd_budget = settings.LLM_DAILY_BUDGET_USD
+    if not token_budget and not usd_budget:
+        return
+    totals = telemetry.llm_today_totals()
+    message = None
+    if token_budget and totals["tokens"] >= token_budget:
+        message = (f"Daily LLM token budget exhausted "
+                   f"({totals['tokens']:,}/{token_budget:,} tokens) — calls blocked until midnight UTC")
+    elif usd_budget and totals["cost_usd"] >= usd_budget:
+        message = (f"Daily LLM cost budget exhausted "
+                   f"(${totals['cost_usd']:.2f}/${usd_budget:.2f}) — calls blocked until midnight UTC")
+    if message:
+        today = date.today().isoformat()
+        if _budget_alert_day != today:
+            _budget_alert_day = today
+            logger.error(f"LLM BUDGET: {message}")
+        raise BudgetExceededError(message)
+
 
 _daily_usage: dict[str, dict] = defaultdict(lambda: {
     "calls": 0, "input_tokens": 0, "output_tokens": 0, "cost": 0.0,
@@ -135,6 +213,14 @@ def _track_usage(provider: str, input_tokens: int, output_tokens: int):
     cost = (input_tokens / 1000 * cfg.get("cost_per_1k_input", 0)
             + output_tokens / 1000 * cfg.get("cost_per_1k_output", 0))
     _daily_usage[key]["cost"] += cost
+
+    try:
+        model = cfg["model"]() if "model" in cfg else None
+    except Exception:
+        model = None
+    telemetry.record_llm_call(
+        provider, model, _FEATURE.get(), input_tokens, output_tokens, cost,
+    )
 
 
 def get_usage_stats() -> dict:
@@ -200,10 +286,23 @@ def _extract_text(provider: str, data: dict) -> str:
         blocks = data.get("content", [])
         return "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
     msg = data["choices"][0]["message"]
-    return (msg.get("content") or msg.get("reasoning_content") or "").strip()
+    content = (msg.get("content") or "").strip()
+    if content:
+        return content
+    # Reasoning models sometimes burn the whole token budget deliberating and
+    # leave content empty — reasoning_content is chain-of-thought, NOT an answer,
+    # and returning it verbatim leaked deliberation into cover letters. Only
+    # salvage an explicitly tagged final answer; otherwise fail this provider so
+    # _call_llm falls over to the next one.
+    reasoning = (msg.get("reasoning_content") or "").strip()
+    m = re.search(r"<ANSWER>(.*?)(?:</ANSWER>|$)", reasoning, re.DOTALL)
+    if m and m.group(1).strip():
+        return m.group(1).strip()
+    raise ValueError(f"{provider} returned reasoning without a final answer (content empty)")
 
 
 def _call_provider(provider: str, system: str, user: str, max_tokens: int = 2000) -> str:
+    _check_budget()
     url, payload, headers = _build_request(provider, system, user, max_tokens)
 
     with httpx.Client(timeout=120.0) as http:
@@ -217,6 +316,7 @@ def _call_provider(provider: str, system: str, user: str, max_tokens: int = 2000
 
 
 async def _call_provider_async(provider: str, system: str, user: str, max_tokens: int = 2000) -> str:
+    _check_budget()
     url, payload, headers = _build_request(provider, system, user, max_tokens)
 
     async with httpx.AsyncClient(timeout=120.0) as http:
@@ -248,6 +348,8 @@ def _call_llm(
 
     try:
         return _call_provider(primary, system, user, max_tokens)
+    except BudgetExceededError:
+        raise  # budget applies to every provider — no point falling back
     except Exception as e:
         logger.warning(f"{primary} failed: {e}")
         for fallback in ordered:
@@ -255,6 +357,8 @@ def _call_llm(
                 try:
                     logger.info(f"Falling back to {fallback}")
                     return _call_provider(fallback, system, user, max_tokens)
+                except BudgetExceededError:
+                    raise
                 except Exception as e2:
                     logger.warning(f"{fallback} also failed: {e2}")
         raise
@@ -324,6 +428,9 @@ async def process_single_job(
         try:
             raw = await _call_with_backoff(provider, system, prompt, max_tokens, job_index)
             return (job_index, parse_json_response(raw), provider)
+        except BudgetExceededError as e:
+            logger.warning(f"[Job {job_index}] skipped: {e}")
+            return (job_index, None, provider)
         except Exception as e:
             logger.warning(f"[Job {job_index}] {provider} failed: {e}")
             for fallback in available:

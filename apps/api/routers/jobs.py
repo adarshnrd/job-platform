@@ -161,9 +161,25 @@ async def trigger_discovery(
     user_id: str = Depends(get_user_id)
 ):
     """Manually trigger job discovery for the current user."""
-    background_tasks.add_task(run_discovery_for_user, user_id, request.region)
+    from services import discovery_progress as progress
+
+    # Don't stack a second run while one is in flight — return the live one.
+    existing = progress.active_run_id(user_id)
+    if existing:
+        return {
+            "success": True,
+            "region": request.region,
+            "run_id": existing,
+            "already_running": True,
+            "message": "A discovery run is already in progress — watch it on the Search Activity page.",
+        }
+
+    run_id = progress.start_run(user_id, request.region, trigger="manual")
+    background_tasks.add_task(run_discovery_for_user, user_id, request.region, "manual", run_id)
     return {
         "success": True,
         "region": request.region,
+        "run_id": run_id,
+        "already_running": False,
         "message": f"Job discovery started ({request.region}). You'll be notified when complete.",
     }

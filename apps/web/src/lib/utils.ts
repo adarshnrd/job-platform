@@ -36,6 +36,7 @@ export const STATUS_CONFIG: Record<ApplicationStatus, { label: string; color: st
   queued:              { label: "Queued",             color: "text-amber-400",   bg: "bg-amber-900/40" },
   applying:            { label: "Applying...",        color: "text-amber-400",   bg: "bg-amber-900/40" },
   needs_input:         { label: "Needs Answer",        color: "text-amber-300",   bg: "bg-amber-900/40" },
+  manual_apply:        { label: "Manual Apply",        color: "text-blue-300",    bg: "bg-blue-900/40" },
   applied:             { label: "Applied",            color: "text-green-400",   bg: "bg-green-900/40" },
   under_review:        { label: "Under Review",       color: "text-cyan-400",    bg: "bg-cyan-900/40" },
   assessment:          { label: "Assessment",         color: "text-purple-400",  bg: "bg-purple-900/40" },
@@ -61,6 +62,9 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   foundit: "Foundit", remoteok: "RemoteOK", weworkremotely: "We Work Remotely",
   iimjobs: "iimjobs", timesjobs: "TimesJobs", shine: "Shine",
   freshersworld: "Freshersworld", ycombinator: "Y Combinator",
+  dice: "Dice", ziprecruiter: "ZipRecruiter", remotive: "Remotive",
+  arbeitnow: "Arbeitnow", themuse: "The Muse", adzuna: "Adzuna",
+  jooble: "Jooble", jsearch: "JSearch (Google Jobs)",
   company_portal: "Company Portal", other: "Other",
 };
 

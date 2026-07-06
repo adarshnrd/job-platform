@@ -8,6 +8,7 @@ regions ("india" / "global") it serves.
 """
 import asyncio
 import inspect
+from datetime import datetime
 from loguru import logger
 from database import get_db, select_in_batches
 from services.ai import batch_parse_jds, batch_score_jobs
@@ -29,6 +30,7 @@ from scrapers.iimjobs import IimjobsScraper
 from scrapers.timesjobs import TimesJobsScraper
 from scrapers.shine import ShineScraper
 from scrapers.freshersworld import FreshersworldScraper
+from scrapers.ycombinator import YCombinatorScraper
 # API-first sources — stable, no browser
 from scrapers.remotive import RemotiveScraper
 from scrapers.arbeitnow import ArbeitnowScraper
@@ -37,19 +39,23 @@ from scrapers.adzuna import AdzunaScraper
 from scrapers.jooble import JoobleScraper
 from scrapers.jsearch import JSearchScraper
 from config import settings
+from services import discovery_progress as progress
 
 db = get_db()
 
 
 class Source:
     """A discovery source and its routing metadata."""
-    def __init__(self, name, cls, api_based, requires_key, regions, login_capable=False):
+    def __init__(self, name, cls, api_based, requires_key, regions, login_capable=False, discoverable=True):
         self.name = name
         self.cls = cls
         self.api_based = api_based
         self.requires_key = requires_key
         self.regions = regions
         self.login_capable = login_capable
+        # C-tier boards (hard bot-walls) stay registered for display/apply but
+        # are skipped during discovery so they don't burn run time yielding nothing.
+        self.discoverable = discoverable
 
 
 # Registry of every source. `regions` controls when each is used.
@@ -57,16 +63,14 @@ SOURCE_REGISTRY: dict[str, Source] = {
     # ── Playwright / login scrapers (India market) ──
     "naukri":         Source("naukri", NaukriScraper, False, False, {"india"}, login_capable=True),
     "linkedin":       Source("linkedin", LinkedInScraper, False, False, {"india", "global"}, login_capable=True),
-    "indeed":         Source("indeed", IndeedScraper, False, False, {"india", "global"}, login_capable=True),
-    "instahyre":      Source("instahyre", InstahyreScraper, False, False, {"india"}, login_capable=True),
-    "hirist":         Source("hirist", HiristScraper, False, False, {"india"}),
-    "iimjobs":        Source("iimjobs", IimjobsScraper, False, False, {"india"}),
-    "timesjobs":      Source("timesjobs", TimesJobsScraper, False, False, {"india"}),
+    "indeed":         Source("indeed", IndeedScraper, False, False, {"india", "global"}, login_capable=True, discoverable=False),
+    "instahyre":      Source("instahyre", InstahyreScraper, False, False, {"india"}, login_capable=True, discoverable=False),
     "shine":          Source("shine", ShineScraper, False, False, {"india"}),
-    "freshersworld":  Source("freshersworld", FreshersworldScraper, False, False, {"india"}),
-    "cutshort":       Source("cutshort", CutshortScraper, False, False, {"india"}),
-    "foundit":        Source("foundit", FounditScraper, False, False, {"india"}),
-    "wellfound":      Source("wellfound", WellfoundScraper, False, False, {"india", "global"}),
+    "freshersworld":  Source("freshersworld", FreshersworldScraper, False, False, {"india"}, discoverable=False),
+    "cutshort":       Source("cutshort", CutshortScraper, False, False, {"india"}, discoverable=False),
+    "foundit":        Source("foundit", FounditScraper, False, False, {"india"}, discoverable=False),
+    "wellfound":      Source("wellfound", WellfoundScraper, False, False, {"india", "global"}, discoverable=False),
+    "ycombinator":    Source("ycombinator", YCombinatorScraper, False, False, {"global"}),
     "glassdoor":      Source("glassdoor", GlassdoorScraper, False, False, {"global"}),
     "dice":           Source("dice", DiceScraper, False, False, {"global"}),
     "ziprecruiter":   Source("ziprecruiter", ZipRecruiterScraper, False, False, {"global"}),
@@ -74,6 +78,9 @@ SOURCE_REGISTRY: dict[str, Source] = {
     # ── API-first keyless sources ──
     "remoteok":       Source("remoteok", RemoteOKScraper, True, False, {"global", "india"}),
     "remotive":       Source("remotive", RemotiveScraper, True, False, {"global", "india"}),
+    "timesjobs":      Source("timesjobs", TimesJobsScraper, True, False, {"india"}),
+    "hirist":         Source("hirist", HiristScraper, True, False, {"india"}),
+    "iimjobs":        Source("iimjobs", IimjobsScraper, True, False, {"india"}),
     "arbeitnow":      Source("arbeitnow", ArbeitnowScraper, True, False, {"global"}),
     "themuse":        Source("themuse", TheMuseScraper, True, False, {"india", "global"}),
     # ── API-first keyed sources (dormant until keys set) ──
@@ -88,7 +95,9 @@ def select_sources(region: str, preferred_platforms: list[str]) -> list[Source]:
 
     - Always includes API-first sources serving the region (keyed ones only if
       their key is present).
-    - Includes the user's preferred Playwright/login scrapers that serve the region.
+    - Playwright scrapers are opt-OUT: with no explicit `preferred_platforms`,
+      every regional scraper runs (public, unauthenticated search — login only
+      matters at apply time). A non-empty list narrows to that subset.
     """
     region = region if region in ("india", "global") else "india"
     selected: dict[str, Source] = {}
@@ -96,20 +105,61 @@ def select_sources(region: str, preferred_platforms: list[str]) -> list[Source]:
     for name, src in SOURCE_REGISTRY.items():
         if region not in src.regions:
             continue
+        # C-tier boards are display/apply-only — never discovered.
+        if not src.discoverable:
+            continue
         # Keyed sources need a valid key.
         if src.requires_key and not _has_key(src.cls):
             continue
-        # API-first keyless sources are always on for the region.
-        if src.api_based and not src.requires_key:
+        # API-first sources (keyless, or keyed with key present) are always on.
+        if src.api_based:
             selected[name] = src
-        # Keyed API sources that passed the key check are on.
-        elif src.api_based and src.requires_key:
-            selected[name] = src
-        # Playwright sources: only if the user opted into them.
-        elif name in (preferred_platforms or []):
+        # Playwright sources: all by default; user list narrows the set.
+        elif not preferred_platforms or name in preferred_platforms:
             selected[name] = src
 
     return list(selected.values())
+
+
+# Location tokens that mark a profile as India-based. Substring match,
+# lowercase — covers city spellings the portals themselves use.
+INDIA_LOCATION_HINTS = (
+    "india", "bangalore", "bengaluru", "pune", "gurgaon", "gurugram",
+    "noida", "delhi", "ncr", "hyderabad", "chennai", "mumbai", "kolkata",
+    "ahmedabad", "jaipur", "indore", "kochi", "trivandrum", "chandigarh",
+)
+
+
+def infer_region(preferred_locations: list[str] | None) -> str:
+    """Region for a user's locations. City names imply india; empty defaults
+    to india (this is an India-first deployment)."""
+    locations = [loc for loc in (preferred_locations or []) if loc]
+    if not locations:
+        return "india"
+    for loc in locations:
+        low = loc.lower()
+        if any(hint in low for hint in INDIA_LOCATION_HINTS):
+            return "india"
+    return "global"
+
+
+def build_search_pairs(
+    queries: list[str],
+    locations: list[str],
+    cap: int,
+    offset: int = 0,
+) -> list[tuple[str, str]]:
+    """(query, location) pairs for one source, capped to keep runs bounded.
+
+    Locations vary in the outer loop so the cap never starves a city of every
+    query. When capped, `offset` rotates the starting pair so successive runs
+    walk the full matrix instead of always searching the same slice.
+    """
+    pairs = [(q, loc) for loc in locations for q in queries]
+    if not pairs or len(pairs) <= cap:
+        return pairs
+    offset = offset % len(pairs)
+    return (pairs[offset:] + pairs[:offset])[:cap]
 
 
 def _has_key(cls) -> bool:
@@ -143,18 +193,24 @@ async def _call_search(scraper, *, query, location, max_results, credentials, re
     return await scraper.search_jobs(**kwargs)
 
 
-def run_discovery_for_user(user_id: str, region: str = "india"):
-    """Entry point called by FastAPI BackgroundTasks."""
+def run_discovery_for_user(user_id: str, region: str = "india", trigger: str = "manual", run_id: str | None = None):
+    """Entry point called by FastAPI BackgroundTasks. The /jobs/discover endpoint
+    pre-creates the run so it can return the run_id immediately; scheduled runs
+    create it here."""
+    run_id = run_id or progress.start_run(user_id, region, trigger)
     try:
-        asyncio.run(_discover_for_user_async(user_id, region))
+        asyncio.run(_discover_for_user_async(user_id, region, run_id))
+        progress.finish_run(run_id)
     except Exception as e:
         logger.error(f"Discovery failed for user {user_id}: {e}")
+        progress.finish_run(run_id, status="failed", error=str(e))
 
 
-async def _discover_for_user_async(user_id: str, region: str = "india"):
+async def _discover_for_user_async(user_id: str, region: str = "india", run_id: str = ""):
     user_res = db.table("users").select("*").eq("id", user_id).single().execute()
     if not user_res.data:
         logger.warning(f"User {user_id} not found")
+        progress.log(run_id, "User profile not found — aborting", "error")
         return
 
     user = user_res.data
@@ -178,7 +234,14 @@ async def _discover_for_user_async(user_id: str, region: str = "india"):
     queries = list(set(q for q in queries if q))[:3]
     if not queries:
         queries = ["software developer"]
-    location = preferred_locations[0] if preferred_locations else "India"
+    locations = [loc for loc in (preferred_locations or []) if loc] or ["India"]
+    # Rotate the capped query×city matrix hourly so every run covers a
+    # different slice and the full matrix is walked across a day's runs.
+    search_pairs = build_search_pairs(
+        queries, locations,
+        cap=settings.DISCOVERY_MAX_SEARCHES_PER_SOURCE,
+        offset=datetime.utcnow().hour,
+    )
 
     # Company blacklist is optional — tolerate a missing table.
     blacklisted: set[str] = set()
@@ -206,6 +269,12 @@ async def _discover_for_user_async(user_id: str, region: str = "india"):
         f"Discovery for {user_id} (region={region}): "
         f"{len(sources)} sources → {[s.name for s in sources]}"
     )
+    progress.register_sources(run_id, [s.name for s in sources])
+    progress.set_phase(
+        run_id, "searching",
+        f"Searching {len(sources)} sources with queries {queries} "
+        f"across {', '.join(locations)}",
+    )
     raw_jobs = []
 
     for src in sources:
@@ -216,40 +285,51 @@ async def _discover_for_user_async(user_id: str, region: str = "india"):
         credentials = None
 
         try:
+            progress.source_started(run_id, src.name)
             async with src.cls() as scraper:
-                for query in queries:
-                    logger.info(f"Searching {src.name} for '{query}' in {location}")
+                for query, loc in search_pairs:
+                    logger.info(f"Searching {src.name} for '{query}' in {loc}")
+                    progress.searching_query(run_id, src.name, query, loc)
                     try:
                         jobs = await _call_search(
                             scraper,
                             query=query,
-                            location=location,
-                            max_results=settings.MAX_JOBS_PER_DISCOVERY // len(queries),
+                            location=loc,
+                            max_results=max(5, settings.MAX_JOBS_PER_DISCOVERY // len(search_pairs)),
                             credentials=credentials,
                             region=region,
                         )
+                        new_count = 0
                         for job in jobs:
                             if job.source_url not in existing_urls and job.company.lower() not in blacklisted:
                                 raw_jobs.append(job)
                                 existing_urls.add(job.source_url)
+                                new_count += 1
+                        progress.query_result(run_id, src.name, query, len(jobs), new_count)
                     except Exception as e:
                         logger.error(f"Error searching {src.name} for '{query}': {e}")
+                        progress.log(run_id, f"{src.name}: '{query}' failed — {e}", "error")
                         continue
+            progress.source_finished(run_id, src.name)
         except Exception as e:
             logger.error(f"Failed to initialize {src.name} scraper: {e}")
+            progress.source_finished(run_id, src.name, error=str(e))
             continue
 
     if not raw_jobs:
         logger.info(f"No new jobs found for {user_id}")
+        progress.log(run_id, "No new jobs found across all sources")
         return
 
     logger.info(f"Scraped {len(raw_jobs)} new jobs — starting parallel AI evaluation")
 
     # ── Phase 2: Batch parse all JDs concurrently across both APIs ──
+    progress.set_phase(run_id, "analyzing", f"Parsing {len(raw_jobs)} job descriptions with AI")
     jd_texts = [job.jd_text for job in raw_jobs]
     parsed_jds = await batch_parse_jds(jd_texts)
 
     # ── Phase 3: Store job listings in DB ──
+    progress.log(run_id, f"Storing {len(raw_jobs)} job listings")
     job_ids = []
     valid_indices = []
     for i, job in enumerate(raw_jobs):
@@ -259,6 +339,11 @@ async def _discover_for_user_async(user_id: str, region: str = "india"):
             valid_indices.append(i)
 
     # ── Phase 4: Batch score all jobs concurrently with double-eval ──
+    progress.set_phase(
+        run_id, "scoring",
+        f"Scoring {len(valid_indices)} jobs against your profile (dual-LLM double-eval)",
+    )
+    progress.update_counts(run_id, evaluated=len(valid_indices))
     score_inputs = [
         (parsed_jds[i], jd_texts[i])
         for i in valid_indices
@@ -266,6 +351,8 @@ async def _discover_for_user_async(user_id: str, region: str = "india"):
     scores = await batch_score_jobs(user, score_inputs, double_eval_threshold=70)
 
     # ── Phase 5: Store results and queue auto-apply ──
+    progress.set_phase(run_id, "saving", "Saving match results and queueing auto-applies")
+    queued_count = 0
     newly_matched = []
     for result_idx, orig_idx in enumerate(valid_indices):
         job_id = job_ids[orig_idx]
@@ -311,6 +398,7 @@ async def _discover_for_user_async(user_id: str, region: str = "india"):
                 db.table("job_applications").update(
                     {"status": "queued"}
                 ).eq("id", app_res.data[0]["id"]).execute()
+                queued_count += 1
 
         if score >= settings.RECOMMENDED_THRESHOLD:
             job_dict = raw_jobs[orig_idx].dict()
@@ -323,6 +411,7 @@ async def _discover_for_user_async(user_id: str, region: str = "india"):
         f"{len(raw_jobs)} scraped, {len(valid_indices)} evaluated, "
         f"{len(newly_matched)} matched (>={settings.RECOMMENDED_THRESHOLD}%)"
     )
+    progress.update_counts(run_id, matched=len(newly_matched), queued=queued_count)
 
     try:
         from services.job_tracker import update_tracker
@@ -333,7 +422,12 @@ async def _discover_for_user_async(user_id: str, region: str = "india"):
 
 async def _upsert_job_listing(job) -> str | None:
     from datetime import datetime
+    from services.portals import normalize_job_url
     job_data = job.dict()
+    # Canonicalize the URL (e.g. angel.co → wellfound.com) so the same role from
+    # different hosts collapses onto one listing via the unique source_url index.
+    if job_data.get("source_url"):
+        job_data["source_url"] = normalize_job_url(job_data["source_url"])
     job_data["required_skills"] = list(job_data.get("required_skills") or [])
     job_data["nice_to_have_skills"] = list(job_data.get("nice_to_have_skills") or [])
     # Pydantic enum → its string value for the Postgres enum column.

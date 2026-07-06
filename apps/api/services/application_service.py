@@ -159,16 +159,41 @@ def prepare_application(user_id: str, application_id: str, overrides: dict | Non
     cover_letter = generate_cover_letter(user, job, resume_summary)
     log_event(application_id, user_id, "cover_letter_generated", "AI cover letter drafted (real data only)")
 
-    # 4) Draft screening answers. If the AI flags missing info, collect it from the
-    #    user instead of submitting a fabricated answer.
+    # 4) Draft screening answers — answer once, reuse forever:
+    #    user override → saved Answer Bank answer → AI draft. If the AI flags
+    #    missing info, collect it from the user instead of fabricating; any
+    #    answer the user provides is banked so no application asks it again.
+    from services.questions import QuestionService
+    question_service = QuestionService()
+
     drafted_answers = []
     answer_gaps = []
     for q in COMMON_SCREENING_QUESTIONS:
-        # If the user supplied this answer (via a prior needs_input round), use it verbatim.
+        # If the user supplied this answer (via a prior needs_input round), use it
+        # verbatim and persist it to the Answer Bank for every future application.
         user_answer = overrides.get(f"answer::{q}")
         if user_answer not in (None, ""):
             drafted_answers.append({"question": q, "answer": user_answer, "source": "user"})
+            try:
+                question_service.create_manual(user_id, q, user_answer)
+            except Exception as e:
+                logger.warning(f"Answer Bank save skipped for '{q}': {e}")
             continue
+
+        # Reuse a previously banked answer (exact or fuzzy match) — don't re-ask.
+        try:
+            banked = question_service.find_banked(user_id, q)
+        except Exception as e:
+            logger.debug(f"Answer Bank lookup skipped for '{q}': {e}")
+            banked = None
+        if banked and banked.get("value") not in (None, ""):
+            drafted_answers.append({"question": q, "answer": banked["value"], "source": "bank"})
+            try:
+                question_service.record_usage(user_id, banked["question_id"])
+            except Exception:
+                pass
+            continue
+
         try:
             ans = answer_screening_question(q, user, job)
         except Exception as e:

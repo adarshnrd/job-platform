@@ -36,14 +36,20 @@ export function DashboardClient({ user }: { user: any }) {
   const triggerDiscovery = async () => {
     setDiscovering(true);
     try {
-      await api.jobs.discover({
+      const res = await api.jobs.discover({
         platforms: user?.preferred_platforms || ["linkedin", "naukri", "indeed"],
         region,
       });
       toast.success(
-        region === "india"
-          ? "Searching Indian job market — you'll be notified of new matches."
-          : "Searching globally — you'll be notified of new matches."
+        <span>
+          {res.already_running
+            ? "Discovery is already running."
+            : region === "india"
+              ? "Searching the Indian job market."
+              : "Searching globally."}{" "}
+          <a href="/activity" className="underline font-semibold whitespace-nowrap">Watch live →</a>
+        </span>,
+        { duration: 6000 }
       );
     } catch (e: any) {
       toast.error(e.message || "Discovery failed");

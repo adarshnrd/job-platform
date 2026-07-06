@@ -40,3 +40,19 @@ def test_angellist_aliases_to_wellfound():
 def test_cutshort_has_assessment_guard():
     from services.sessions.adapters.cutshort import CutshortAdapter
     assert hasattr(CutshortAdapter, "_pre_apply_block")
+
+
+def test_ycombinator_adapter_registered():
+    assert "ycombinator" in ADAPTERS
+    assert get_adapter("ycombinator").platform_name == "ycombinator"
+
+
+def test_normalize_job_url_angellist_to_wellfound():
+    from services.portals import normalize_job_url
+    assert normalize_job_url("https://angel.co/company/foo/jobs/123") == "https://wellfound.com/company/foo/jobs/123"
+    assert normalize_job_url("https://www.angel.co/l/xyz") == "https://www.wellfound.com/l/xyz"
+
+def test_normalize_job_url_strips_tracking():
+    from services.portals import normalize_job_url
+    assert normalize_job_url("https://boards.example.com/job/9?utm_source=x&ref=y") == "https://boards.example.com/job/9"
+    assert normalize_job_url("https://x.com/job/9/") == "https://x.com/job/9"

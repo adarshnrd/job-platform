@@ -11,6 +11,7 @@ from models.job import JobListingCreate, Platform
 class NaukriScraper(BaseScraper):
     platform = Platform.naukri
     rate_limit_per_minute = 15
+    requires_headed = True  # Akamai serves "Access Denied" to every headless browser
     BASE_URL = "https://www.naukri.com"
 
     async def search_jobs(

@@ -41,6 +41,11 @@ def job_url_hash(url: str) -> str:
 class BaseScraper(ABC):
     platform: Platform
     rate_limit_per_minute: int = 10
+    # True for boards behind bot-walls (Akamai etc.) that serve "Access Denied"
+    # to EVERY headless browser. These get a visible Chrome window instead —
+    # acceptable on a local-first deployment, and the only way through.
+    # Disable globally with SCRAPER_ALLOW_HEADED=false.
+    requires_headed: bool = False
 
     def __init__(self):
         self.rate_limiter = RateLimiter(self.rate_limit_per_minute)
@@ -57,21 +62,43 @@ class BaseScraper(ABC):
 
     async def _start_browser(self):
         self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(
-            headless=settings.PLAYWRIGHT_HEADLESS,
+        headed = self.requires_headed and settings.SCRAPER_ALLOW_HEADED
+        launch_kwargs = dict(
+            headless=settings.PLAYWRIGHT_HEADLESS and not headed,
             args=[
                 "--no-sandbox",
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
                 "--window-size=1366,768",
-            ]
+            ],
         )
-        self._context = await self._browser.new_context(
+        # Real installed Chrome has a far cleaner bot-detection fingerprint than
+        # bundled Chromium. Fall back to bundled if the channel isn't installed.
+        using_real_chrome = False
+        if settings.PLAYWRIGHT_CHANNEL:
+            try:
+                self._browser = await self._playwright.chromium.launch(
+                    channel=settings.PLAYWRIGHT_CHANNEL, **launch_kwargs
+                )
+                using_real_chrome = True
+            except Exception as e:
+                logger.debug(f"Chrome channel '{settings.PLAYWRIGHT_CHANNEL}' unavailable ({e}); using bundled Chromium")
+        if self._browser is None:
+            self._browser = await self._playwright.chromium.launch(**launch_kwargs)
+
+        context_kwargs = dict(
             viewport={"width": 1366, "height": 768},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
             java_script_enabled=True,
             locale="en-US",
         )
+        # Only spoof a UA on bundled Chromium — real Chrome's own UA is
+        # consistent with its TLS/client-hints fingerprint, a spoofed one isn't.
+        if not using_real_chrome:
+            context_kwargs["user_agent"] = (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+            )
+        self._context = await self._browser.new_context(**context_kwargs)
         # Stealth: remove webdriver property
         await self._context.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', {get: () => undefined});

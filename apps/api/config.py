@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
 
+    # Daily LLM budgets — hard stop across ALL providers once exceeded (0 = unlimited)
+    LLM_DAILY_TOKEN_BUDGET: int = 0
+    LLM_DAILY_BUDGET_USD: float = 0.0
+
     # Job-source aggregator APIs (optional — sources auto-skip when unset)
     ADZUNA_APP_ID: str = ""
     ADZUNA_APP_KEY: str = ""
@@ -56,10 +60,13 @@ class Settings(BaseSettings):
 
     # Automation
     PLAYWRIGHT_HEADLESS: bool = True
+    PLAYWRIGHT_CHANNEL: str = "chrome"  # real Chrome; "" = bundled Chromium
+    SCRAPER_ALLOW_HEADED: bool = True   # let bot-walled boards open a visible window
     BROWSER_TIMEOUT_MS: int = 30000
     MAX_APPLY_RETRIES: int = 3
     DISCOVERY_INTERVAL_HOURS: int = 4
     MAX_JOBS_PER_DISCOVERY: int = 50
+    DISCOVERY_MAX_SEARCHES_PER_SOURCE: int = 6
     LISTING_REVALIDATION_HOURS: int = 12
     STUCK_RECOVERY_INTERVAL_MINUTES: int = 20
     STUCK_APPLYING_TIMEOUT_MINUTES: int = 30

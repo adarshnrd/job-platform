@@ -37,8 +37,15 @@ def filter_and_rank(
     user_skills: set[str],
     min_score: int | None = None,
     show_archived: bool = False,
+    rescue: bool = True,
 ) -> list[dict]:
-    """Filter by relevance, rescue skill-matched jobs, sort by recency then score.
+    """Filter by relevance, sort by recency then score.
+
+    When `rescue` is True (the Jobs/dashboard browse experience), a job below
+    min_score is still surfaced if its required skills overlap the user's
+    profile — worth seeing even though it scored low. When `rescue` is False
+    (an explicit user-chosen score filter, e.g. the Applications page), the
+    cutoff is a hard boundary: nothing below min_score is included, full stop.
 
     Returns rows annotated with recency_bucket, recency_label, skill_rescued, rescue_skills.
     """
@@ -60,19 +67,12 @@ def filter_and_rank(
         rescued = False
         rescue_skills_list = []
 
-        if not show_archived and tier == "archived" and score < min_score:
-            job_skills = {s.lower() for s in (r.get("job_required_skills") or [])}
-            overlap = job_skills & core_skills_lower
-            if overlap:
-                rescued = True
-                rescue_skills_list = sorted(
-                    s for s in (r.get("job_required_skills") or [])
-                    if s.lower() in core_skills_lower
-                )
-            else:
-                continue
+        below_cutoff = score < min_score and not show_archived
+        archived_below_cutoff = not show_archived and tier == "archived" and score < min_score
 
-        elif score < min_score and not show_archived:
+        if below_cutoff or archived_below_cutoff:
+            if not rescue:
+                continue
             job_skills = {s.lower() for s in (r.get("job_required_skills") or [])}
             overlap = job_skills & core_skills_lower
             if overlap:
