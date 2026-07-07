@@ -86,11 +86,18 @@ There are no meaningful *city-exclusive* job boards for Bangalore/Pune/NCR tech 
 7. **apna.co scraper** — city-page scrape for the tech categories; gate by role fit so it doesn't flood entry-level listings.
 8. **BigShyft spike** (timeboxed 1 day) — if jobs aren't browsable without invite, mark C-tier and move on.
 
-### Phase 2 — ATS-direct aggregation (5–8 days) ⭐ the multiplier
+### Phase 2 — ATS-direct aggregation (5–8 days) ⭐ the multiplier — **STARTED 2026-07-07**
 
-9. **`ats_boards` table** (company, ats_type, board_token, discovered_from, active, last_seen) + **token harvester**: regex-parse every `apply_url`/`source_url` we already store, backfill once, then harvest continuously during discovery.
-10. **One generic `ATSBoardScraper`** with per-ATS adapters (greenhouse/lever/ashby/workable/smartrecruiters) that iterates active boards, filters by preferred cities + remote-India, and emits jobs into the normal pipeline. API-based, parallel, incremental via `updated_at` where offered.
-11. **Seed list** of ~100 India-hiring companies per ATS to bootstrap before harvesting compounds.
+**Shipped (v1, seed-list):** `scrapers/ats.py` `ATSAggregatorScraper` — one source fanning out across public Greenhouse/Lever/Ashby JSON boards (keyless, no bot-walls). Verified live: **329 India jobs from 11 seed companies** (Postman, Groww, Druva, Netskope, PhonePe, HackerRank, MongoDB, GitLab, Elastic, Databricks on Greenhouse; Meesho on Lever). Registered as `ats` (api_based, region india, platform `company_portal`). Loads all boards once per run (concurrent), caches, filters each `search_jobs(query, location)` by India-location + query relevance (recall-first; LLM scoring is the precision gate). Offline fixture tests in `tests/test_ats_scraper.py`.
+
+**Still to do (v2):** the `ats_boards` DB table + token harvester (parse `apply_url`/`source_url` we already store → auto-grow the company list), per-run incremental via `updated_at`, and a larger curated seed. Below is the original design.
+
+
+
+9. ✅ **DONE (2026-07-07): One generic `ATSAggregatorScraper`** (`scrapers/ats.py`) — Greenhouse/Lever/Ashby per-ATS normalizers, fans out across all boards in parallel, filters to India + remote-India, emits into the normal pipeline. Browserless (APIBaseScraper), registered as the `ats` source (api_based, always-on). **20 verified India-hiring boards** yielding ~520 India jobs.
+10. ✅ **DONE (2026-07-07): Token harvester** (`services/ats_harvester.py`) — regex-extracts Greenhouse/Lever/Ashby tokens from stored `apply_url`/`source_url`, validates each board resolves to live jobs, persists to `data/ats_boards.json`. Runs at the end of every discovery (`harvest_from_db`, bounded to 15 new/run); the ATS scraper loads seed ∪ harvested, so coverage compounds automatically. Chose a JSON store over an `ats_boards` table to stay local-first (no migration).
+11. ✅ **Seed list** — 20 boards verified live (not ~100; many big India startups use non-Greenhouse/custom-token ATS, which is exactly what the harvester discovers over time rather than us guessing tokens).
+12. ✅ **Content-level dedup** (`services/dedup.py` + `database/11_job_dedup.sql`) — normalized title+company fingerprint (`dedupe_key`) collapses reposts across boards/cities; graceful pre-migration fallback in `_upsert_job_listing`.
 
 ### Phase 3 — Scale & reliability architecture (1–2 weeks, incremental)
 

@@ -38,8 +38,10 @@ from scrapers.themuse import TheMuseScraper
 from scrapers.adzuna import AdzunaScraper
 from scrapers.jooble import JoobleScraper
 from scrapers.jsearch import JSearchScraper
+from scrapers.ats import ATSAggregatorScraper
 from config import settings
 from services import discovery_progress as progress
+from services.dedup import job_fingerprint
 
 db = get_db()
 
@@ -81,6 +83,8 @@ SOURCE_REGISTRY: dict[str, Source] = {
     "timesjobs":      Source("timesjobs", TimesJobsScraper, True, False, {"india"}),
     "hirist":         Source("hirist", HiristScraper, True, False, {"india"}),
     "iimjobs":        Source("iimjobs", IimjobsScraper, True, False, {"india"}),
+    # ATS-direct: many company career boards (Greenhouse/Lever/Ashby) in one source.
+    "ats":            Source("ats", ATSAggregatorScraper, True, False, {"india"}),
     "arbeitnow":      Source("arbeitnow", ArbeitnowScraper, True, False, {"global"}),
     "themuse":        Source("themuse", TheMuseScraper, True, False, {"india", "global"}),
     # ── API-first keyed sources (dormant until keys set) ──
@@ -252,14 +256,18 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
         logger.warning(f"Blacklist lookup skipped: {e}")
 
     existing_urls: set[str] = set()
+    existing_fps: set[str] = set()
     try:
         existing_res = db.table("job_applications").select("job_listing_id").eq("user_id", user_id).execute()
         if existing_res.data:
             app_job_ids = [r["job_listing_id"] for r in existing_res.data]
             # Batched IN — the id set grows unbounded with a user's history and a
             # single .in_() would eventually exceed PostgREST's URL length limit.
-            seen_rows = select_in_batches(db, "job_listings", "source_url", "id", app_job_ids)
+            seen_rows = select_in_batches(db, "job_listings", "source_url, title, company", "id", app_job_ids)
             existing_urls = {r["source_url"] for r in seen_rows}
+            # Content fingerprints catch reposts of the same role under a fresh
+            # URL — the unique source_url alone can't.
+            existing_fps = {job_fingerprint(r.get("title"), r.get("company")) for r in seen_rows}
     except Exception as e:
         logger.warning(f"Existing-URL dedup lookup skipped: {e}")
 
@@ -301,9 +309,15 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
                         )
                         new_count = 0
                         for job in jobs:
-                            if job.source_url not in existing_urls and job.company.lower() not in blacklisted:
+                            fp = job_fingerprint(job.title, job.company)
+                            if (
+                                job.source_url not in existing_urls
+                                and fp not in existing_fps
+                                and job.company.lower() not in blacklisted
+                            ):
                                 raw_jobs.append(job)
                                 existing_urls.add(job.source_url)
+                                existing_fps.add(fp)
                                 new_count += 1
                         progress.query_result(run_id, src.name, query, len(jobs), new_count)
                     except Exception as e:
@@ -419,6 +433,43 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
     except Exception as e:
         logger.warning(f"Job tracker update failed (non-fatal): {e}")
 
+    # Grow ATS coverage from the URLs this run collected — validated boards are
+    # persisted and picked up by the next run's ATS source. Non-fatal, bounded.
+    try:
+        from services.ats_harvester import harvest_from_db
+        added = await harvest_from_db(db, max_new=15)
+        if added:
+            progress.log(run_id, f"ATS harvester discovered {len(added)} new company board(s)")
+    except Exception as e:
+        logger.warning(f"ATS harvest failed (non-fatal): {e}")
+
+
+def _ilike_exact(text: str) -> str:
+    """Escape LIKE wildcards so .ilike() does a case-insensitive exact match."""
+    return (text or "").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _find_existing_listing(job_data: dict) -> str | None:
+    """Content-level dedup: a listing with the same normalized title+company is
+    the same job, no matter what URL the portal minted for the repost."""
+    try:
+        res = db.table("job_listings").select("id")\
+            .eq("dedupe_key", job_data["dedupe_key"]).limit(1).execute()
+        return res.data[0]["id"] if res.data else None
+    except Exception:
+        # Pre-migration: dedupe_key column missing (run database/11_job_dedup.sql).
+        # Fall back to case-insensitive exact title+company — catches identical
+        # reposts, just not punctuation/suffix variants.
+        try:
+            res = db.table("job_listings").select("id")\
+                .ilike("title", _ilike_exact(job_data.get("title")))\
+                .ilike("company", _ilike_exact(job_data.get("company")))\
+                .limit(1).execute()
+            return res.data[0]["id"] if res.data else None
+        except Exception as e:
+            logger.warning(f"Dedup lookup skipped: {e}")
+            return None
+
 
 async def _upsert_job_listing(job) -> str | None:
     from datetime import datetime
@@ -428,6 +479,12 @@ async def _upsert_job_listing(job) -> str | None:
     # different hosts collapses onto one listing via the unique source_url index.
     if job_data.get("source_url"):
         job_data["source_url"] = normalize_job_url(job_data["source_url"])
+    job_data["dedupe_key"] = job_fingerprint(job_data.get("title"), job_data.get("company"))
+    # Same role already stored under a different URL? Reuse that listing so the
+    # application lands on it instead of creating a duplicate row.
+    existing_id = _find_existing_listing(job_data)
+    if existing_id:
+        return existing_id
     job_data["required_skills"] = list(job_data.get("required_skills") or [])
     job_data["nice_to_have_skills"] = list(job_data.get("nice_to_have_skills") or [])
     # Pydantic enum → its string value for the Postgres enum column.
@@ -442,6 +499,17 @@ async def _upsert_job_listing(job) -> str | None:
         result = db.table("job_listings").upsert(job_data, on_conflict="source_url").execute()
         return result.data[0]["id"] if result.data else None
     except Exception as e:
+        # Pre-migration safety: dedupe_key column not in the DB yet — store
+        # without it. Run database/11_job_dedup.sql for DB-level dedup.
+        if "dedupe_key" in str(e).lower():
+            logger.warning("dedupe_key column missing — run database/11_job_dedup.sql for DB-level dedup.")
+            job_data.pop("dedupe_key", None)
+            try:
+                result = db.table("job_listings").upsert(job_data, on_conflict="source_url").execute()
+                return result.data[0]["id"] if result.data else None
+            except Exception as e2:
+                logger.error(f"Job upsert retry failed: {e2}")
+                return None
         # Pre-migration safety: if the new enum value isn't in the DB yet,
         # fall back to 'other' so discovery still works. Run database/02_api_sources.sql
         # to store the real source name.

@@ -1,0 +1,196 @@
+{
+ "jobs": [
+  {
+   "absolute_url": "https://job-boards.eu.greenhouse.io/groww/jobs/4880153101",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": 4477650101,
+   "location": {
+    "name": "Bengaluru-VTP, India"
+   },
+   "metadata": [
+    {
+     "id": 9193480101,
+     "name": "Designation",
+     "value": "Associate",
+     "value_type": "short_text"
+    }
+   ],
+   "id": 4880153101,
+   "updated_at": "2026-07-07T06:51:08-04:00",
+   "requisition_id": "GRID-17155",
+   "title": "Associate - Content (Digest)",
+   "company_name": "Groww",
+   "first_published": "2026-06-03T02:46:08-04:00",
+   "language": "en",
+   "application_deadline": null,
+   "content": "&lt;div&gt;&lt;strong&gt;About Groww:&lt;/strong&gt;&lt;/div&gt;\n&lt;div&gt;We are a passionate group of people focused on making financial services accessible to every Indian through a multi-product platform. Each day, we help millions of customers take charge of their financial journey. Customer obsession is in our DNA. Every product, every design, every algorithm down to the tiniest detail is executed keeping the customers\u2019 needs and convenience in mind. Our people are our greatest strength. Everyone at Groww is driven by ownership, customer-centricity, integrity and the passion to constantly challenge the status quo.&lt;/div&gt;\n&lt;div&gt;&amp;nbsp;&lt;/div&gt;\n&lt;div&gt;Are you as passionate about defying conventions and creating something extraordinary as we are? Let\u2019s chat.&lt;/div&gt;\n&lt;div&gt;&amp;nbsp;&lt;/div&gt;\n&lt;div&gt;&lt;strong&gt;Our Vision&lt;/strong&gt;&lt;/div&gt;\n&lt;div&gt;Every individual deserves the knowledge, tools, and confidence to make informed financial decisions. At Groww, we are making sure every Indian feels empowered to do so through a cutting-edge multi-product platform offering a variety of financial services. Our long-term vision is to become the trusted financial partner for millions of Indians.&lt;/div&gt;\n&lt;div&gt;&amp;nbsp;&lt;/div&gt;\n&lt;div&gt;&lt;strong&gt;Our Values&lt;/strong&gt;&lt;/div&gt;\n&lt;div&gt;Our culture enables us to be what we are \u2014 India\u2019s fastest-growing financial services company. It fosters an environment where collaboration, transparency, and open communication take center-stage and hierarchies fade away. There is space for every individual to be themselves and feel motivated to bring their best to the table, as well as craft a promising career for themselves.&lt;/div&gt;\n&lt;div&gt;The values that form our foundation are:&lt;/div&gt;\n&lt;ul&gt;\n&lt;li&gt;Radical customer centricity&lt;/li&gt;\n&lt;li&gt;Ownership-driven culture&lt;/li&gt;\n&lt;li&gt;Keeping everything simple&lt;/li&gt;\n&lt;li&gt;Long-term thinking&lt;/li&gt;\n&lt;li&gt;Complete transparency&lt;/li&gt;\n&lt;/ul&gt;\n&lt;div&gt;&lt;strong&gt;About the Role&lt;/strong&gt;&lt;/div&gt;\n&lt;div&gt;&amp;nbsp;&lt;/div&gt;\n&lt;div&gt;Groww Digest is looking for a curious and research-driven individual who enjoys exploring a wide range of topics and uncovering unique insights. This role involves analyzing markets, sectors, companies, and macro trends, and turning research into clear, engaging content.&lt;/div&gt;\n&lt;div&gt;While a basic understanding of finance and investing is important, we value curiosity and a genuine love for learning even more.&lt;/div&gt;\n&lt;div&gt;&amp;nbsp;&lt;/div&gt;\n&lt;div&gt;&lt;strong&gt;Key Responsibilities&lt;/strong&gt;&lt;/div&gt;\n&lt;div&gt;\n&lt;ul&gt;\n&lt;li&gt;\n&lt;p&gt;Research market-linked themes and their impact on sectors and companies.&lt;/p&gt;\n&lt;/li&gt;\n&lt;li&gt;\n&lt;p&gt;Analyze industries, businesses, and macroeconomic trends.&lt;/p&gt;\n&lt;/li&gt;\n&lt;li&gt;\n&lt;p&gt;Interpret financial and industry data to generate insights.&lt;/p&gt;\n&lt;/li&gt;\n&lt;li&gt;\n&lt;p&gt;Write simple, engaging, and insight-driven articles.&lt;/p&gt;\n&lt;/li&gt;\n&lt;li&gt;\n&lt;p&gt;Present complex topics in a clear and accessible manner.&lt;/p&gt;\n&lt;/li&gt;\n&lt;/ul&gt;\n&lt;/div&gt;\n&lt;div&gt;&lt;strong&gt;What We&#39;re Looking For&lt;/strong&gt;&lt;/div&gt;\n&lt;ul&gt;\n&lt;li&gt;\n&lt;div&gt;Strong interest in finance and investing.&lt;/div&gt;\n&lt;/li&gt;\n&lt;li&gt;\n&lt;div&gt;Excellent research and analytical skills.&lt;/div&gt;\n&lt;/li&gt;\n&lt;li&gt;\n&lt;div&gt;Curiosity across diverse topics and industries.&lt;/div&gt;\n&lt;/li&gt;\n&lt;li&gt;\n&lt;div&gt;Strong writing and communication abilities.&lt;/div&gt;\n&lt;/li&gt;\n&lt;li&gt;\n&lt;div&gt;Passion for reading, learning, and deep analysis.&lt;/div&gt;\n&lt;/li&gt;\n&lt;/ul&gt;",
+   "departments": [
+    {
+     "id": 4033749101,
+     "name": "Growth",
+     "child_ids": [
+      4037712101,
+      4037713101,
+      4033753101,
+      4033750101,
+      4033755101,
+      4033754101,
+      4033752101,
+      4033751101
+     ],
+     "parent_id": null
+    }
+   ],
+   "offices": [
+    {
+     "id": 4018978101,
+     "name": "Bengaluru-VTP",
+     "location": "Bengaluru-VTP, India",
+     "child_ids": [],
+     "parent_id": 4018977101
+    }
+   ],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": null,
+   "ai_opt_out_request_url": null
+  },
+  {
+   "absolute_url": "https://job-boards.eu.greenhouse.io/groww/jobs/4875247101",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": 4475610101,
+   "location": {
+    "name": "India"
+   },
+   "metadata": [
+    {
+     "id": 9193480101,
+     "name": "Designation",
+     "value": "Assistant Manager",
+     "value_type": "short_text"
+    }
+   ],
+   "id": 4875247101,
+   "updated_at": "2026-06-26T01:42:03-04:00",
+   "requisition_id": "GRID-17142",
+   "title": "Business Operations Associate (GIFT City)",
+   "company_name": "Groww",
+   "first_published": "2026-06-09T01:34:03-04:00",
+   "language": "en",
+   "application_deadline": null,
+   "content": "&lt;div&gt;&lt;strong&gt;About Groww:&lt;/strong&gt;&lt;/div&gt;\n&lt;div&gt;We are a passionate group of people focused on making financial services accessible to every Indian through a multi-product platform. Each day, we help millions of customers take charge of their financial journey. Customer obsession is in our DNA. Every product, every design, every algorithm down to the tiniest detail is executed keeping the customers\u2019 needs and convenience in mind. Our people are our greatest strength. Everyone at Groww is driven by ownership, customer-centricity, integrity and the passion to constantly challenge the status quo.&lt;/div&gt;\n&lt;div&gt;&amp;nbsp;&lt;/div&gt;\n&lt;div&gt;Are you as passionate about defying conventions and creating something extraordinary as we are? Let\u2019s chat.&lt;/div&gt;\n&lt;div&gt;&amp;nbsp;&lt;/div&gt;\n&lt;div&gt;&lt;strong&gt;Our Vision&lt;/strong&gt;&lt;/div&gt;\n&lt;div&gt;Every individual deserves the knowledge, tools, and confidence to make informed financial decisions. At Groww, we are making sure every Indian feels empowered to do so through a cutting-edge multi-product platform offering a variety of financial services. Our long-term vision is to become the trusted financial partner for millions of Indians.&lt;/div&gt;\n&lt;div&gt;&amp;nbsp;&lt;/div&gt;\n&lt;div&gt;&lt;strong&gt;Our Values&lt;/strong&gt;&lt;/div&gt;\n&lt;div&gt;Our culture enables us to be what we are \u2014 India\u2019s fastest-growing financial services company. It fosters an environment where collaboration, transparency, and open communication take center-stage and hierarchies fade away. There is space for every individual to be themselves and feel motivated to bring their best to the table, as well as craft a promising career for themselves.&lt;/div&gt;\n&lt;div&gt;The values that form our foundation are:&lt;/div&gt;\n&lt;ul&gt;\n&lt;li&gt;Radical customer centricity&lt;/li&gt;\n&lt;li&gt;Ownership-driven culture&lt;/li&gt;\n&lt;li&gt;Keeping everything simple&lt;/li&gt;\n&lt;li&gt;Long-term thinking&lt;/li&gt;\n&lt;li&gt;Complete transparency&lt;/li&gt;\n&lt;/ul&gt;\n&lt;div&gt;&lt;br&gt;&lt;strong&gt;About the Role&lt;/strong&gt;&lt;br&gt;We are looking for a detail-oriented and execution-focused Business Operations &amp;amp; Analyst professional to support the day-to-day operations of our US Stocks business under Groww IFSC. This role will be responsible for business monitoring, operational execution, customer grievance management, and ensuring critical business metrics remain within defined thresholds.&lt;br&gt;The ideal candidate should possess strong analytical skills, operational discipline, and the ability to coordinate effectively across internal and external stakeholders to ensure seamless business operations and superior customer experience.&lt;/div&gt;\n&lt;div&gt;&amp;nbsp;&lt;/div&gt;\n&lt;div&gt;&lt;strong&gt;Location&lt;/strong&gt;&lt;br&gt;&lt;strong&gt;GIFT City, Ahmedabad, Gujarat&lt;/strong&gt;&lt;/div&gt;\n&lt;div&gt;&amp;nbsp;&lt;/div&gt;\n&lt;div&gt;&lt;strong&gt;Key Responsibilities&lt;/strong&gt;&lt;br&gt;Business Monitoring &amp;amp; Operations&lt;/div&gt;\n&lt;ul&gt;\n&lt;li&gt;Track and monitor daily business volumes, transaction values, and key operational metrics&lt;/li&gt;\n&lt;li&gt;Maintain operational dashboards and ensure timely reporting of business performance&lt;/li&gt;\n&lt;li&gt;Identify deviations, exceptions, or breaches in key metrics and proactively escalate them to relevant stakeholders&lt;/li&gt;\n&lt;/ul&gt;\n&lt;div&gt;Stakeholder Coordination &amp;amp; Issue Resolution&lt;/div&gt;\n&lt;ul&gt;\n&lt;li&gt;Coordinate with internal teams, partners, and external stakeholders to resolve operational issues and restore metrics to expected levels&lt;/li&gt;\n&lt;li&gt;Drive timely closure of operational incidents and track corrective actions&lt;/li&gt;\n&lt;li&gt;Ensure smooth execution of established operational processes and controls&lt;/li&gt;\n&lt;/ul&gt;\n&lt;div&gt;Customer Operations &amp;amp; Grievance Management&lt;/div&gt;\n&lt;ul&gt;\n&lt;li&gt;Manage end-to-end customer grievance resolution for the US Stocks business&lt;/li&gt;\n&lt;li&gt;Ensure adherence to defined turnaround times (TATs) and service standards&lt;/li&gt;\n&lt;li&gt;Act as a liaison between customers and internal teams to facilitate timely issue resolution&lt;/li&gt;\n&lt;li&gt;Identify recurring customer issues and drive root-cause analysis&lt;/li&gt;\n&lt;/ul&gt;\n&lt;div&gt;RAA Payout Operations&lt;/div&gt;\n&lt;ul&gt;\n&lt;li&gt;Support and ensure accurate and timely execution of RAA payouts for US Stocks customers&lt;/li&gt;\n&lt;li&gt;Coordinate with relevant teams to ensure smooth processing and reconciliation of payouts&lt;/li&gt;\n&lt;/ul&gt;\n&lt;div&gt;Customer Insights &amp;amp; Process Improvement&lt;/div&gt;\n&lt;ul&gt;\n&lt;li&gt;Capture, categorize, and track customer pain points and operational challenges&lt;/li&gt;\n&lt;li&gt;Generate actionable insights from customer feedback and operational data&lt;/li&gt;\n&lt;li&gt;Work with business and product teams to improve processes, customer experience, and operational efficiency&lt;/li&gt;\n&lt;/ul&gt;\n&lt;div&gt;&lt;strong&gt;Preferred Background&lt;/strong&gt;&lt;/div&gt;\n&lt;ul&gt;\n&lt;li&gt;Experience in banking, brokerage, fintech, wealth management, or capital markets operations&lt;/li&gt;\n&lt;li&gt;Prior exposure to customer grievance management and operational monitoring&lt;/li&gt;\n&lt;li&gt;Understanding of US Stocks, international investing, or cross-border investment products will be a strong advantage&lt;/li&gt;\n&lt;li&gt;Experience working within regulated financial services environments is preferred&lt;/li&gt;\n&lt;li&gt;3 - 4 years of relevant experience&lt;/li&gt;\n&lt;/ul&gt;",
+   "departments": [
+    {
+     "id": 4033766101,
+     "name": "Operations",
+     "child_ids": [
+      4033771101,
+      4033767101,
+      4045149101,
+      4038404101,
+      4033772101,
+      4037717101,
+      4033768101,
+      4033769101,
+      4038863101,
+      4038402101,
+      4037720101,
+      4033770101,
+      4043887101,
+      4037718101
+     ],
+     "parent_id": 4033777101
+    }
+   ],
+   "offices": [
+    {
+     "id": 4026560101,
+     "name": "Mumbai-OWC",
+     "location": "Mumbai-OWC, India",
+     "child_ids": [],
+     "parent_id": 4016225101
+    }
+   ],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": null,
+   "ai_opt_out_request_url": null
+  },
+  {
+   "absolute_url": "https://job-boards.eu.greenhouse.io/groww/jobs/4875246101",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": 4475609101,
+   "location": {
+    "name": "India"
+   },
+   "metadata": [
+    {
+     "id": 9193480101,
+     "name": "Designation",
+     "value": null,
+     "value_type": "short_text"
+    }
+   ],
+   "id": 4875246101,
+   "updated_at": "2026-06-08T11:26:46-04:00",
+   "requisition_id": "GRID-17141",
+   "title": "Compliance Officer (GIFT City)",
+   "company_name": "Groww",
+   "first_published": "2026-06-08T11:24:44-04:00",
+   "language": "en",
+   "application_deadline": null,
+   "content": "&lt;p&gt;&lt;strong&gt;About Groww:&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;We are a passionate group of people focused on making financial services accessible to every Indian through a multi-product platform. Each day, we help millions of customers take charge of their financial journey. Customer obsession is in our DNA. Every product, every design, every algorithm down to the tiniest detail is executed keeping the customers\u2019 needs and convenience in mind. Our people are our greatest strength. Everyone at Groww is driven by ownership, customer-centricity, integrity and the passion to constantly challenge the status quo.&lt;/p&gt;\n&lt;p&gt;Are you as passionate about defying conventions and creating something extraordinary as we are? Let\u2019s chat.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Our Vision&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;Every individual deserves the knowledge, tools, and confidence to make informed financial decisions. At Groww, we are making sure every Indian feels empowered to do so through a cutting-edge multi-product platform offering a variety of financial services. Our long-term vision is to become the trusted financial partner for millions of Indians.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Our Values&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;Our culture enables us to be what we are \u2014 India\u2019s fastest-growing financial services company. It fosters an environment where collaboration, transparency, and open communication take center-stage and hierarchies fade away. There is space for every individual to be themselves and feel motivated to bring their best to the table, as well as craft a promising career for themselves.&lt;/p&gt;\n&lt;p&gt;The values that form our foundation are:&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;Radical customer centricity&lt;/li&gt;\n&lt;li&gt;Ownership-driven culture&lt;/li&gt;\n&lt;li&gt;Keeping everything simple&lt;/li&gt;\n&lt;li&gt;Long-term thinking&lt;/li&gt;\n&lt;li&gt;Complete transparency&lt;/li&gt;\n&lt;/ul&gt;\n&lt;div&gt;&amp;nbsp;&lt;/div&gt;\n&lt;div&gt;&lt;strong&gt;Location&lt;/strong&gt;&lt;/div&gt;\n&lt;p&gt;GIFT City, Gujarat&lt;/p&gt;\n&lt;div&gt;&lt;strong&gt;About the Role&lt;/strong&gt;&lt;/div&gt;\n&lt;p&gt;We are looking for a high-energy, execution-oriented Compliance Officer to support and scale our US Stocks business under Groww IFSC, a GAP-licensed entity regulated by IFSCA. This role requires a strong blend of compliance rigor, business tracking capability, stakeholder management, and program execution excellence.&lt;/p&gt;\n&lt;p&gt;The ideal candidate should be polished, articulate, regulator-facing, and capable of independently owning critical compliance and operational reporting responsibilities for the business.&lt;/p&gt;\n&lt;div&gt;&lt;strong&gt;Key Responsibilities&lt;/strong&gt;&lt;/div&gt;\n&lt;p&gt;&lt;strong&gt;Compliance &amp;amp; Regulatory Management&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;Own and track all key business and compliance metrics for the US Stocks business&lt;/li&gt;\n&lt;li&gt;Ensure accurate and timely submission of regulatory reports and disclosures to IFSCA and other applicable authorities&lt;/li&gt;\n&lt;li&gt;Act as a key point of contact for regulator interactions, audits, inspections, and ongoing compliance discussions&lt;/li&gt;\n&lt;li&gt;Maintain strong governance standards across business operations&lt;/li&gt;\n&lt;/ul&gt;\n&lt;div&gt;&lt;strong&gt;Business &amp;amp; Program Management&lt;/strong&gt;&lt;/div&gt;\n&lt;ul&gt;\n&lt;li&gt;Drive program management for strategic and operational initiatives within the US Stocks business&lt;/li&gt;\n&lt;li&gt;Coordinate cross-functional execution across compliance, operations, product, and business teams&lt;/li&gt;\n&lt;li&gt;Bring strong execution rigor to ensure business growth and operational scalability&lt;/li&gt;\n&lt;li&gt;Track progress, identify risks, and ensure timely closure of action items&lt;/li&gt;\n&lt;/ul&gt;\n&lt;div&gt;&lt;strong&gt;Desired Skills &amp;amp; Attributes&lt;/strong&gt;&lt;/div&gt;\n&lt;ul&gt;\n&lt;li&gt;Strong understanding of compliance, governance, and reporting frameworks within financial services&lt;/li&gt;\n&lt;li&gt;Excellent communication and presentation skills&lt;/li&gt;\n&lt;li&gt;Confident in regulator-facing interactions&lt;/li&gt;\n&lt;li&gt;High ownership mindset with strong execution capabilities&lt;/li&gt;\n&lt;li&gt;Strong analytical and business tracking orientation&lt;/li&gt;\n&lt;li&gt;Ability to thrive in a fast-paced, high-growth environment&lt;/li&gt;\n&lt;/ul&gt;\n&lt;div&gt;&lt;strong&gt;Preferred Background&lt;/strong&gt;&lt;/div&gt;\n&lt;ul&gt;\n&lt;li&gt;Experience in IFSC/GIFT City entities, capital markets, brokerage, fintech, or international investment products&lt;/li&gt;\n&lt;li&gt;Exposure to regulatory reporting and stakeholder management within regulated financial institutions&lt;/li&gt;\n&lt;li&gt;4\u20135 years of relevant experience&lt;/li&gt;\n&lt;li&gt;Candidates must already be based in GIFT City or currently working within the IFSC or&amp;nbsp; ecosystem&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&amp;nbsp;&lt;/p&gt;",
+   "departments": [
+    {
+     "id": 4034118101,
+     "name": "Compliance",
+     "child_ids": [
+      4033704101,
+      4033705101
+     ],
+     "parent_id": null
+    }
+   ],
+   "offices": [
+    {
+     "id": 4026560101,
+     "name": "Mumbai-OWC",
+     "location": "Mumbai-OWC, India",
+     "child_ids": [],
+     "parent_id": 4016225101
+    }
+   ],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": null,
+   "ai_opt_out_request_url": null
+  }
+ ],
+ "meta": {
+  "total": 15
+ }
+}
