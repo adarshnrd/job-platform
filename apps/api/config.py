@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     ADZUNA_APP_KEY: str = ""
     JOOBLE_API_KEY: str = ""
     JSEARCH_RAPIDAPI_KEY: str = ""
+    CAREERJET_AFFID: str = ""  # free affiliate id from partners.careerjet.com
 
     # Email (Resend) — optional; email notifications disabled if unset
     RESEND_API_KEY: str = ""
@@ -67,6 +68,9 @@ class Settings(BaseSettings):
     DISCOVERY_INTERVAL_HOURS: int = 4
     MAX_JOBS_PER_DISCOVERY: int = 50
     DISCOVERY_MAX_SEARCHES_PER_SOURCE: int = 6
+    # Rule-based relevance gate before LLM parse/score — protects the token budget
+    # from high-volume sources (ATS boards carry many off-profile roles).
+    DISCOVERY_PREFILTER_ENABLED: bool = True
     LISTING_REVALIDATION_HOURS: int = 12
     STUCK_RECOVERY_INTERVAL_MINUTES: int = 20
     STUCK_APPLYING_TIMEOUT_MINUTES: int = 30

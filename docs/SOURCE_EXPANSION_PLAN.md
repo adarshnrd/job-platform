@@ -82,9 +82,9 @@ There are no meaningful *city-exclusive* job boards for Bangalore/Pune/NCR tech 
 
 ### Phase 1 — New sources, ranked by ROI (3–5 days)
 
-6. **Careerjet API scraper** (free key, structured, India coverage) — ~half a day, same shape as adzuna.py.
-7. **apna.co scraper** — city-page scrape for the tech categories; gate by role fit so it doesn't flood entry-level listings.
-8. **BigShyft spike** (timeboxed 1 day) — if jobs aren't browsable without invite, mark C-tier and move on.
+6. ✅ **DONE (2026-07-08): Careerjet API scraper** (`scrapers/careerjet.py`) — structured aggregator API, strong India coverage, `locale_code=en_IN`. Dormant keyed source (needs a free `CAREERJET_AFFID` from partners.careerjet.com) — same pattern as Adzuna/Jooble/JSearch. Added `careerjet` to the Platform enum + migration bundle + frontend labels. Strips HTML from descriptions. Tests in `tests/test_careerjet_scraper.py`.
+7. **apna.co scraper** — DEFERRED. Evaluated: apna is a mass-hiring / entry-level-heavy board (blue-collar + junior white-collar). Low relevance for a senior SWE profile and it would flood the pipeline with off-target roles. Not worth building for the current single-user deployment; revisit if a multi-user / junior-profile use case appears. (The Phase-3 prefilter would gate it anyway.)
+8. **BigShyft** — DEFERRED as C-tier: invite/curated model, jobs not freely browsable (per portal roadmap). Not a scrapeable board.
 
 ### Phase 2 — ATS-direct aggregation (5–8 days) ⭐ the multiplier — **STARTED 2026-07-07**
 
@@ -103,7 +103,7 @@ There are no meaningful *city-exclusive* job boards for Bangalore/Pune/NCR tech 
 
 12. **Source SDK**: declarative per-source config (regions, city-format mapping, rate limits, RSS/incremental support, role-fit tags) so adding a source is config + one class, and the registry/UI/docs derive from it.
 13. **Smart scheduling**: telemetry source-health (built 2026-07-05) drives the scheduler — degraded sources get retried less often and flagged; healthy high-yield sources run more; per-source jitter to spread load.
-14. **Volume controls**: rule-based prefilter (title/location/salary keywords) before LLM scoring so 5–10× more raw jobs doesn't mean 5–10× LLM cost (budget guardrails already enforce the ceiling); per-run per-source caps.
+14. ✅ **DONE (2026-07-08): Volume controls** — `services/prefilter.py`, a deterministic recall-first relevance gate that runs *before* LLM parse/score (`DISCOVERY_PREFILTER_ENABLED`, default on). Matches the user's distinctive skills (as whole phrases — never decomposed, so "Express.js" ≠ "express interest") against title+skills+JD, plus generic tech-role vocabulary against the title only. Drops clearly off-profile roles (sales/HR/finance/content); verified live dropping ~28% of the ATS flood with zero false drops. This is what makes the 520-job ATS source affordable through dual-LLM double-eval. Tests in `tests/test_prefilter.py`.
 15. **Dedup upgrade**: same job appears on Naukri+LinkedIn+Adzuna+ATS — URL dedup no longer enough; add company+title+location fingerprint now, embedding dedup later (FUTURE_ROADMAP Horizon 2 item).
 16. **Coverage dashboard**: sources active/total, jobs/day per city and per source (Mission Control data already collects this).
 

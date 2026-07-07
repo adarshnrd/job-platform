@@ -64,7 +64,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   freshersworld: "Freshersworld", ycombinator: "Y Combinator",
   dice: "Dice", ziprecruiter: "ZipRecruiter", remotive: "Remotive",
   arbeitnow: "Arbeitnow", themuse: "The Muse", adzuna: "Adzuna",
-  jooble: "Jooble", jsearch: "JSearch (Google Jobs)",
+  jooble: "Jooble", jsearch: "JSearch (Google Jobs)", careerjet: "Careerjet",
   company_portal: "Company Portal", other: "Other",
 };
 

@@ -38,6 +38,7 @@ from scrapers.themuse import TheMuseScraper
 from scrapers.adzuna import AdzunaScraper
 from scrapers.jooble import JoobleScraper
 from scrapers.jsearch import JSearchScraper
+from scrapers.careerjet import CareerjetScraper
 from scrapers.ats import ATSAggregatorScraper
 from config import settings
 from services import discovery_progress as progress
@@ -91,6 +92,7 @@ SOURCE_REGISTRY: dict[str, Source] = {
     "adzuna":         Source("adzuna", AdzunaScraper, True, True, {"india", "global"}),
     "jooble":         Source("jooble", JoobleScraper, True, True, {"india", "global"}),
     "jsearch":        Source("jsearch", JSearchScraper, True, True, {"india", "global"}),
+    "careerjet":      Source("careerjet", CareerjetScraper, True, True, {"india", "global"}),
 }
 
 def select_sources(region: str, preferred_platforms: list[str]) -> list[Source]:
@@ -334,6 +336,19 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
         logger.info(f"No new jobs found for {user_id}")
         progress.log(run_id, "No new jobs found across all sources")
         return
+
+    # ── Phase 1.5: cheap rule-based prefilter (protect the LLM budget) ──
+    # Drops obviously off-profile roles (sales/finance/etc. that big boards carry)
+    # before any LLM parse/score. Recall-first — see services/prefilter.py.
+    if settings.DISCOVERY_PREFILTER_ENABLED:
+        from services.prefilter import prefilter_jobs
+        raw_jobs, dropped = prefilter_jobs(raw_jobs, user)
+        if dropped:
+            progress.log(run_id, f"Prefilter: skipped {dropped} off-profile jobs before AI scoring")
+        if not raw_jobs:
+            logger.info(f"All scraped jobs filtered out as off-profile for {user_id}")
+            progress.log(run_id, "No on-profile jobs after prefilter")
+            return
 
     logger.info(f"Scraped {len(raw_jobs)} new jobs — starting parallel AI evaluation")
 

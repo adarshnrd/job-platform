@@ -33,6 +33,7 @@ class Platform(str, Enum):
     adzuna = "adzuna"
     jooble = "jooble"
     jsearch = "jsearch"
+    careerjet = "careerjet"
     company_portal = "company_portal"
     other = "other"
 

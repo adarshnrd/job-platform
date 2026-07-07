@@ -216,4 +216,5 @@ ALTER TYPE platform ADD VALUE IF NOT EXISTS 'themuse';
 ALTER TYPE platform ADD VALUE IF NOT EXISTS 'adzuna';
 ALTER TYPE platform ADD VALUE IF NOT EXISTS 'jooble';
 ALTER TYPE platform ADD VALUE IF NOT EXISTS 'jsearch';
+ALTER TYPE platform ADD VALUE IF NOT EXISTS 'careerjet';
 
