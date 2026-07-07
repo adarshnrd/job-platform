@@ -43,6 +43,17 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
 
 type Bucket = "active" | "history" | "archived";
 
+// Mirrors the backend's lifecycle buckets (HISTORY_STATUSES/_bucket_of in
+// routers/applications.py) so optimistic updates land rows in the same bucket
+// the server would put them in.
+const HISTORY_STATUSES = new Set<ApplicationStatus>([
+  "applied", "under_review", "assessment", "interview_scheduled",
+  "technical_round", "hr_round", "offer_received", "accepted", "rejected",
+]);
+
+const bucketOf = (status: ApplicationStatus): Bucket =>
+  HISTORY_STATUSES.has(status) ? "history" : status === "withdrawn" ? "archived" : "active";
+
 const BUCKET_TABS: { key: Bucket; label: string; hint: string }[] = [
   { key: "active", label: "Active", hint: "Jobs you can still act on" },
   { key: "history", label: "History", hint: "Everything you've applied to" },
@@ -101,8 +112,10 @@ export function ApplicationsClient({ userId }: { userId: string }) {
     if (next && !events[next]) loadEvents(next);
   };
 
-  const load = async () => {
-    setLoading(true);
+  // silent: refresh data in place without flipping `loading` — the table stays
+  // mounted, so the user doesn't see a full skeleton re-render.
+  const load = async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true);
     try {
       const params: Record<string, string> = {
         bucket,
@@ -119,7 +132,7 @@ export function ApplicationsClient({ userId }: { userId: string }) {
     } catch (e: any) {
       toast.error(e.message || "Failed to load");
     } finally {
-      setLoading(false);
+      if (!opts.silent) setLoading(false);
     }
   };
 
@@ -142,18 +155,49 @@ export function ApplicationsClient({ userId }: { userId: string }) {
   }, []);
 
   const handleStatusChange = async (id: string, status: ApplicationStatus) => {
+    const app = apps.find(a => a.id === id);
+    if (!app || app.status === status) return;
+    const prevApps = apps;
+    const prevCounts = counts;
+
+    // Optimistic: patch just this row. It stays visible only if its new status
+    // still belongs to the current tab and status filter — marking a job
+    // Applied from the Active tab removes it (it moves to History).
+    const stillVisible = bucketOf(status) === bucket && (!filterStatus || status === filterStatus);
+    setApps(cur => stillVisible
+      ? cur.map(a => (a.id === id ? { ...a, status } : a))
+      : cur.filter(a => a.id !== id));
+    const from = bucketOf(app.status), to = bucketOf(status);
+    if (counts && from !== to) {
+      setCounts({ ...counts, [from]: Math.max(0, counts[from] - 1), [to]: counts[to] + 1 });
+    }
+
     try {
       await api.applications.update(id, { status });
       toast.success("Status updated");
-      load();
-    } catch (e: any) { toast.error(e.message); }
+      load({ silent: true }); // re-sync counts/ordering without a skeleton flash
+    } catch (e: any) {
+      setApps(prevApps);
+      setCounts(prevCounts);
+      toast.error(e.message);
+    }
   };
 
   const handleStar = async (id: string) => {
+    const target = apps.find(a => a.id === id);
+    if (!target) return;
+    const prevApps = apps;
+    const starred = !target.is_starred;
+    // Optimistic: un-starring under the Starred filter removes the row.
+    setApps(cur => filterStarred && !starred
+      ? cur.filter(a => a.id !== id)
+      : cur.map(a => (a.id === id ? { ...a, is_starred: starred } : a)));
     try {
       await api.applications.star(id);
-      load();
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: any) {
+      setApps(prevApps);
+      toast.error(e.message);
+    }
   };
 
   const exportFile = async (format: "csv" | "excel") => {
@@ -220,7 +264,7 @@ export function ApplicationsClient({ userId }: { userId: string }) {
               </div>
             )}
           </div>
-          <button onClick={load} disabled={loading} className="btn-secondary flex items-center gap-2 text-xs">
+          <button onClick={() => load()} disabled={loading} className="btn-secondary flex items-center gap-2 text-xs">
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
         </div>
@@ -535,7 +579,7 @@ export function ApplicationsClient({ userId }: { userId: string }) {
           jobTitle={applyTarget.job_title || "this role"}
           jobCompany={applyTarget.job_company || "the company"}
           onClose={() => setApplyTarget(null)}
-          onUpdated={() => { setApplyTarget(null); load(); }}
+          onUpdated={() => { setApplyTarget(null); load({ silent: true }); }}
         />
       )}
     </div>
