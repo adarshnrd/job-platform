@@ -336,6 +336,41 @@ def source_health(user_id: str, days: int = 14) -> list[dict]:
     return out
 
 
+def source_health_map(user_id: str, days: int = 14) -> dict[str, dict]:
+    """source_health() keyed by source name — for the scheduler and coverage view."""
+    return {s["source"]: s for s in source_health(user_id, days=days)}
+
+
+def source_contribution(user_id: str, days: int = 14) -> dict[str, dict]:
+    """Per-source totals over the window: new jobs contributed, raw yield, runs."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    con = _conn()
+    try:
+        rows = con.execute(
+            "SELECT source, COUNT(*) AS runs, "
+            "COALESCE(SUM(jobs_found),0) AS jobs_found, COALESCE(SUM(jobs_seen),0) AS jobs_seen "
+            "FROM run_sources WHERE user_id = ? AND finished_at >= ? GROUP BY source",
+            (user_id, cutoff),
+        ).fetchall()
+    finally:
+        con.close()
+    return {r["source"]: {"runs": r["runs"], "jobs_found": r["jobs_found"], "jobs_seen": r["jobs_seen"]}
+            for r in rows}
+
+
+def discovery_run_count(user_id: str) -> int:
+    """Total completed discovery runs for a user — drives the scheduler's probe cadence."""
+    con = _conn()
+    try:
+        row = con.execute(
+            "SELECT COUNT(*) AS n FROM runs WHERE user_id = ? AND kind = 'discovery'",
+            (user_id,),
+        ).fetchone()
+        return row["n"] if row else 0
+    finally:
+        con.close()
+
+
 # ══════════════════════════════════════════════════════════════
 #  LLM USAGE & BUDGET
 # ══════════════════════════════════════════════════════════════

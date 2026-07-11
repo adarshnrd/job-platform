@@ -60,6 +60,13 @@ class Source:
         # are skipped during discovery so they don't burn run time yielding nothing.
         self.discoverable = discoverable
 
+    @property
+    def kind(self) -> str:
+        """Declarative source class for UI/telemetry: ats | api | browser."""
+        if self.name == "ats":
+            return "ats"
+        return "api" if self.api_based else "browser"
+
 
 # Registry of every source. `regions` controls when each is used.
 SOURCE_REGISTRY: dict[str, Source] = {
@@ -275,6 +282,24 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
 
     # ── Phase 1: Scrape selected sources for the region and collect raw jobs ──
     sources = select_sources(region, preferred_platforms)
+
+    # Health-driven scheduling: back off hard-broken sources (with periodic
+    # recovery probes) and run healthy high-yield sources first. Non-fatal.
+    try:
+        from services import telemetry
+        from services.source_scheduler import plan_sources
+        plan = plan_sources(
+            sources,
+            telemetry.source_health_map(user_id),
+            telemetry.discovery_run_count(user_id),
+            explicit_platforms=preferred_platforms,
+        )
+        sources = plan.to_run
+        for name, reason in plan.skipped.items():
+            progress.log(run_id, f"Skipping {name} — {reason} (health-based backoff)")
+    except Exception as e:
+        logger.warning(f"Source scheduling skipped (running all): {e}")
+
     logger.info(
         f"Discovery for {user_id} (region={region}): "
         f"{len(sources)} sources → {[s.name for s in sources]}"

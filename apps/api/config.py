@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     # Rule-based relevance gate before LLM parse/score — protects the token budget
     # from high-volume sources (ATS boards carry many off-profile roles).
     DISCOVERY_PREFILTER_ENABLED: bool = True
+    # Health-driven scheduling: back off hard-broken sources (consecutive errors),
+    # probing for recovery every Nth run. Uses telemetry source-health.
+    DISCOVERY_HEALTH_SCHEDULING_ENABLED: bool = True
+    SOURCE_ERROR_BACKOFF_PROBE_EVERY: int = 4
     LISTING_REVALIDATION_HOURS: int = 12
     STUCK_RECOVERY_INTERVAL_MINUTES: int = 20
     STUCK_APPLYING_TIMEOUT_MINUTES: int = 30

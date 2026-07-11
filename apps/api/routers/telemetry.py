@@ -30,6 +30,88 @@ async def source_health(days: int = 14, user_id: str = Depends(get_user_id)):
     return {"days": days, "sources": telemetry.source_health(user_id, days=days)}
 
 
+@router.get("/coverage")
+async def coverage(days: int = 14, user_id: str = Depends(get_user_id)):
+    """Source coverage overview: active/total, per-source health, contribution,
+    and the scheduling decision the next run would make (running/backed-off/probing).
+    """
+    days = max(1, min(days, 60))
+    from workers.job_discovery import SOURCE_REGISTRY, select_sources
+    from services.source_scheduler import _is_backed_off
+
+    health = telemetry.source_health_map(user_id, days=days)
+    contrib = telemetry.source_contribution(user_id, days=days)
+    run_seq = telemetry.discovery_run_count(user_id)
+    probe_every = max(1, settings.SOURCE_ERROR_BACKOFF_PROBE_EVERY)
+    next_is_probe = settings.DISCOVERY_HEALTH_SCHEDULING_ENABLED and (run_seq % probe_every == 0)
+
+    # Which sources would actually be selected for this user's region right now.
+    region = _user_region(user_id)
+    active_names = {s.name for s in select_sources(region, [])}
+
+    items = []
+    for name, src in sorted(SOURCE_REGISTRY.items()):
+        h = health.get(name)
+        c = contrib.get(name, {})
+        in_region = region in src.regions
+        if not src.discoverable:
+            scheduling = "c_tier"
+        elif src.requires_key and (name not in active_names):
+            scheduling = "dormant"        # keyed source without a key
+        elif not in_region:
+            scheduling = "other_region"
+        elif settings.DISCOVERY_HEALTH_SCHEDULING_ENABLED and not next_is_probe and _is_backed_off(name, h, set()):
+            scheduling = "backed_off"
+        elif settings.DISCOVERY_HEALTH_SCHEDULING_ENABLED and next_is_probe and _is_backed_off(name, h, set()):
+            scheduling = "probing"
+        elif name in active_names:
+            scheduling = "running"
+        else:
+            scheduling = "other_region"
+        items.append({
+            "name": name,
+            "kind": src.kind,
+            "discoverable": src.discoverable,
+            "in_region": in_region,
+            "scheduling": scheduling,
+            "flagged": bool(h and h.get("flagged")),
+            "flag_reason": h.get("flag_reason") if h else None,
+            "success_rate": h.get("success_rate") if h else None,
+            "baseline_yield": h.get("baseline_yield") if h else None,
+            "runs": c.get("runs", 0),
+            "jobs_found": c.get("jobs_found", 0),
+            "latest_status": (h.get("latest") or {}).get("status") if h else None,
+        })
+
+    active = [i for i in items if i["scheduling"] == "running"]
+    return {
+        "days": days,
+        "region": region,
+        "next_run_is_probe": next_is_probe,
+        "totals": {
+            "registered": len(items),
+            "active": len(active),
+            "backed_off": len([i for i in items if i["scheduling"] == "backed_off"]),
+            "probing": len([i for i in items if i["scheduling"] == "probing"]),
+            "dormant": len([i for i in items if i["scheduling"] == "dormant"]),
+            "c_tier": len([i for i in items if i["scheduling"] == "c_tier"]),
+            "flagged": len([i for i in items if i["flagged"]]),
+        },
+        "sources": items,
+    }
+
+
+def _user_region(user_id: str) -> str:
+    """Infer the user's discovery region from their preferred locations."""
+    from database import get_db
+    from workers.job_discovery import infer_region
+    try:
+        res = get_db().table("users").select("preferred_locations").eq("id", user_id).single().execute()
+        return infer_region((res.data or {}).get("preferred_locations"))
+    except Exception:
+        return "india"
+
+
 @router.get("/ai-usage")
 async def ai_usage(days: int = 14, user_id: str = Depends(get_user_id)):
     """LLM usage rollups (today by provider/feature + daily series) and budget status."""

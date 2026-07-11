@@ -29,6 +29,7 @@ async def list_sources(user_id: str = Depends(get_user_id)):
     for name, src in sorted(SOURCE_REGISTRY.items()):
         sources.append({
             "name": name,
+            "kind": src.kind,
             "regions": sorted(src.regions),
             "api_based": src.api_based,
             "requires_key": src.requires_key,

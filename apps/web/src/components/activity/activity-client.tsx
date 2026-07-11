@@ -12,6 +12,7 @@ import { AiUsagePanel } from "./ai-usage";
 import { duration, timeAgo } from "./format";
 import { RunLedger } from "./run-ledger";
 import { SourceHealthPanel } from "./source-health";
+import { CoverageSummaryPanel } from "./coverage-summary";
 
 type Region = "india" | "global";
 type Tab = "live" | "history" | "sources" | "ai";
@@ -183,7 +184,12 @@ export function ActivityClient() {
       </div>
 
       {tab === "history" && <RunLedger />}
-      {tab === "sources" && <SourceHealthPanel />}
+      {tab === "sources" && (
+        <div className="space-y-6">
+          <CoverageSummaryPanel />
+          <SourceHealthPanel />
+        </div>
+      )}
       {tab === "ai" && <AiUsagePanel />}
 
       {/* Live run panel */}

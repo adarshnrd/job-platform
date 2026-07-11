@@ -386,6 +386,40 @@ export interface AiUsageBucket {
   cost_usd: number;
 }
 
+export type SourceScheduling =
+  | "running" | "backed_off" | "probing" | "dormant" | "c_tier" | "other_region";
+
+export interface CoverageSource {
+  name: string;
+  kind: "ats" | "api" | "browser";
+  discoverable: boolean;
+  in_region: boolean;
+  scheduling: SourceScheduling;
+  flagged: boolean;
+  flag_reason: string | null;
+  success_rate: number | null;
+  baseline_yield: number | null;
+  runs: number;
+  jobs_found: number;
+  latest_status: string | null;
+}
+
+export interface CoverageSummary {
+  days: number;
+  region: string;
+  next_run_is_probe: boolean;
+  totals: {
+    registered: number;
+    active: number;
+    backed_off: number;
+    probing: number;
+    dormant: number;
+    c_tier: number;
+    flagged: number;
+  };
+  sources: CoverageSource[];
+}
+
 export interface AiUsageSummary {
   date: string;
   today: {

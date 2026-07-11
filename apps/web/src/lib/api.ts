@@ -19,6 +19,7 @@ import type {
   TelemetryRun,
   SourceHealth,
   AiUsageSummary,
+  CoverageSummary,
 } from "@/types";
 
 /** Partial<User> that also allows null so callers can explicitly clear a column. */
@@ -240,6 +241,7 @@ export const api = {
     sourceHealth: (days = 14) =>
       request<{ days: number; sources: SourceHealth[] }>(`/telemetry/source-health?days=${days}`),
     aiUsage: (days = 14) => request<AiUsageSummary>(`/telemetry/ai-usage?days=${days}`),
+    coverage: (days = 14) => request<CoverageSummary>(`/telemetry/coverage?days=${days}`),
   },
   // Session-based authentication
   sessions: {
