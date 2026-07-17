@@ -10,26 +10,39 @@ from config import settings
 BUCKET_LABELS = {0: "Today", 1: "2 days", 2: "This week", 3: "Older"}
 
 
-def recency_bucket(row: dict) -> int:
-    """Assign a recency bucket: 0=24h, 1=2d, 2=1w, 3=older."""
+def _row_age_hours(row: dict) -> float | None:
+    """Hours since the row's best-known timestamp (posted > discovered > created)."""
     ts = row.get("job_posted_at") or row.get("job_discovered_at") or row.get("created_at")
     if not ts:
-        return 3
+        return None
     try:
         if isinstance(ts, str):
             ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=timezone.utc)
-        age_hours = (datetime.now(timezone.utc) - ts).total_seconds() / 3600
-        if age_hours <= 24:
-            return 0
-        if age_hours <= 48:
-            return 1
-        if age_hours <= 168:
-            return 2
-        return 3
+        return (datetime.now(timezone.utc) - ts).total_seconds() / 3600
     except Exception:
+        return None
+
+
+def recency_bucket(row: dict) -> int:
+    """Assign a recency bucket: 0=24h, 1=2d, 2=1w, 3=older."""
+    age_hours = _row_age_hours(row)
+    if age_hours is None:
         return 3
+    if age_hours <= 24:
+        return 0
+    if age_hours <= 48:
+        return 1
+    if age_hours <= 168:
+        return 2
+    return 3
+
+
+def posted_within(rows: list[dict], days: int) -> list[dict]:
+    """Keep rows whose best-known timestamp falls within the last `days`."""
+    limit_hours = days * 24
+    return [r for r in rows if (age := _row_age_hours(r)) is not None and age <= limit_hours]
 
 
 def filter_and_rank(

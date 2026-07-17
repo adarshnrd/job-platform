@@ -2,8 +2,9 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Application, PortalCapability } from "@/types";
+import { PLATFORM_LABELS } from "@/lib/utils";
 import { JobCard } from "./job-card";
-import { Search, Eye, EyeOff } from "lucide-react";
+import { Search, Eye, EyeOff, MapPin, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 const RECENCY_LABELS: Record<number, string> = {
@@ -13,6 +14,40 @@ const RECENCY_LABELS: Record<number, string> = {
   3: "Older Posts",
 };
 
+// "Max experience required" choices — value is sent as ?experience=N and the
+// API keeps jobs with min_experience <= N (unspecified jobs stay visible).
+const EXPERIENCE_OPTIONS: { value: string; label: string }[] = [
+  { value: "0", label: "Fresher only" },
+  { value: "1", label: "≤ 1 yr required" },
+  { value: "2", label: "≤ 2 yrs required" },
+  { value: "3", label: "≤ 3 yrs required" },
+  { value: "5", label: "≤ 5 yrs required" },
+  { value: "8", label: "≤ 8 yrs required" },
+  { value: "10", label: "≤ 10 yrs required" },
+];
+
+const JOB_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "full_time", label: "Full-time" },
+  { value: "part_time", label: "Part-time" },
+  { value: "contract", label: "Contract" },
+  { value: "freelance", label: "Freelance" },
+  { value: "internship", label: "Internship" },
+];
+
+const POSTED_OPTIONS: { value: string; label: string }[] = [
+  { value: "1", label: "Last 24 hours" },
+  { value: "3", label: "Last 3 days" },
+  { value: "7", label: "Last week" },
+  { value: "14", label: "Last 2 weeks" },
+];
+
+// Platforms surfaced in the filter dropdown (labels come from PLATFORM_LABELS).
+const FILTER_PLATFORMS = [
+  "linkedin", "naukri", "indeed", "wellfound", "company_portal",
+  "remoteok", "remotive", "timesjobs", "hirist", "iimjobs",
+  "shine", "themuse", "careerjet", "jobicy", "himalayas",
+] as const;
+
 export function JobsClient() {
   const [jobs, setJobs] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,8 +55,19 @@ export function JobsClient() {
   const [filterPlatform, setFilterPlatform] = useState("");
   const [filterMode, setFilterMode] = useState("");
   const [filterTier, setFilterTier] = useState("");
+  const [filterExperience, setFilterExperience] = useState("");
+  const [filterJobType, setFilterJobType] = useState("");
+  const [filterPosted, setFilterPosted] = useState("");
+  const [locationInput, setLocationInput] = useState("");
+  const [filterLocation, setFilterLocation] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [portals, setPortals] = useState<Record<string, PortalCapability>>({});
+
+  // Debounce the location text so typing doesn't fire a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setFilterLocation(locationInput.trim()), 400);
+    return () => clearTimeout(t);
+  }, [locationInput]);
 
   useEffect(() => {
     api.portals.list()
@@ -42,6 +88,10 @@ export function JobsClient() {
       const params: Record<string, string> = {};
       if (filterPlatform) params.platform = filterPlatform;
       if (filterMode) params.work_mode = filterMode;
+      if (filterExperience) params.experience = filterExperience;
+      if (filterJobType) params.job_type = filterJobType;
+      if (filterPosted) params.posted_within_days = filterPosted;
+      if (filterLocation) params.location = filterLocation;
       if (showArchived) params.show_archived = "true";
       const data = await api.jobs.list(params);
       setJobs(data.data || data.matched || []);
@@ -52,7 +102,16 @@ export function JobsClient() {
     }
   };
 
-  useEffect(() => { load(); }, [filterPlatform, filterMode, showArchived]);
+  useEffect(() => { load(); }, [filterPlatform, filterMode, filterExperience, filterJobType, filterPosted, filterLocation, showArchived]);
+
+  const hasActiveFilters = !!(filterPlatform || filterMode || filterTier || filterExperience
+    || filterJobType || filterPosted || locationInput || search);
+
+  const clearFilters = () => {
+    setSearch(""); setFilterPlatform(""); setFilterMode(""); setFilterTier("");
+    setFilterExperience(""); setFilterJobType(""); setFilterPosted("");
+    setLocationInput(""); setFilterLocation("");
+  };
 
   const filtered = jobs.filter(j => {
     const q = search.toLowerCase();
@@ -85,12 +144,30 @@ export function JobsClient() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters — experience first, it's the primary criterion */}
       <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-64">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search title or company..." className="input pl-9" />
         </div>
+        <select value={filterExperience} onChange={e => setFilterExperience(e.target.value)}
+          title="Show jobs whose required experience is at most this (jobs without a stated requirement stay visible)"
+          className="input w-auto">
+          <option value="">Any experience</option>
+          {EXPERIENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <div className="relative w-44">
+          <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <input value={locationInput} onChange={e => setLocationInput(e.target.value)} placeholder="Location..." className="input pl-9" />
+        </div>
+        <select value={filterJobType} onChange={e => setFilterJobType(e.target.value)} className="input w-auto">
+          <option value="">All job types</option>
+          {JOB_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <select value={filterPosted} onChange={e => setFilterPosted(e.target.value)} className="input w-auto">
+          <option value="">Any time</option>
+          {POSTED_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
         <select value={filterTier} onChange={e => setFilterTier(e.target.value)} className="input w-auto">
           <option value="">All tiers</option>
           <option value="auto_apply">Auto Apply (80%+)</option>
@@ -105,10 +182,7 @@ export function JobsClient() {
         </select>
         <select value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)} className="input w-auto">
           <option value="">All platforms</option>
-          <option value="linkedin">LinkedIn</option>
-          <option value="naukri">Naukri</option>
-          <option value="indeed">Indeed</option>
-          <option value="wellfound">Wellfound</option>
+          {FILTER_PLATFORMS.map(p => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}
         </select>
         <button
           onClick={() => setShowArchived(!showArchived)}
@@ -121,6 +195,12 @@ export function JobsClient() {
           {showArchived ? <Eye size={13} /> : <EyeOff size={13} />}
           {showArchived ? "Showing all" : "Show archived"}
         </button>
+        {hasActiveFilters && (
+          <button onClick={clearFilters}
+            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors">
+            <X size={13} /> Clear filters
+          </button>
+        )}
       </div>
 
       {/* Jobs grid with recency sections */}

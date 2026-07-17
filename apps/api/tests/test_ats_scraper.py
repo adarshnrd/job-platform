@@ -102,5 +102,5 @@ def test_seed_boards_are_well_formed():
     from scrapers.ats import SEED_BOARDS
     assert SEED_BOARDS
     for b in SEED_BOARDS:
-        assert b["ats"] in ("greenhouse", "lever", "ashby")
+        assert b["ats"] in ("greenhouse", "lever", "ashby", "workable", "smartrecruiters", "recruitee")
         assert b["token"] and b["company"]

@@ -218,3 +218,96 @@ ALTER TYPE platform ADD VALUE IF NOT EXISTS 'jooble';
 ALTER TYPE platform ADD VALUE IF NOT EXISTS 'jsearch';
 ALTER TYPE platform ADD VALUE IF NOT EXISTS 'careerjet';
 
+-- ──────────────────────────────────────────────────────────
+-- >>> 12_hr_contact.sql
+-- ──────────────────────────────────────────────────────────
+-- Adds a hiring contact (email / LinkedIn) per listing and exposes it through
+-- the view. hr_email / hr_linkedin_url are verified-only (provider-sourced);
+-- hr_linkedin_search_url is a keyless people-search link. Idempotent.
+ALTER TABLE public.job_listings
+  ADD COLUMN IF NOT EXISTS hr_name TEXT,
+  ADD COLUMN IF NOT EXISTS hr_email TEXT,
+  ADD COLUMN IF NOT EXISTS hr_linkedin_url TEXT,
+  ADD COLUMN IF NOT EXISTS hr_linkedin_search_url TEXT,
+  ADD COLUMN IF NOT EXISTS hr_contact_source TEXT,
+  ADD COLUMN IF NOT EXISTS hr_contact_confidence SMALLINT;
+
+DROP VIEW IF EXISTS public.application_details;
+CREATE OR REPLACE VIEW public.application_details AS
+SELECT
+  a.*,
+  j.title AS job_title, j.company AS job_company,
+  j.company_logo_url, j.location AS job_location,
+  j.work_mode AS job_work_mode, j.job_type,
+  j.salary_min, j.salary_max, j.salary_currency,
+  j.source_platform, j.source_url, j.apply_url,
+  j.is_easy_apply, j.required_skills AS job_required_skills, j.jd_text,
+  j.posted_at AS job_posted_at,
+  j.discovered_at AS job_discovered_at,
+  j.is_active AS job_is_active,
+  j.expired_at AS job_expired_at,
+  j.expiry_reason AS job_expiry_reason,
+  j.hr_name, j.hr_email, j.hr_linkedin_url,
+  j.hr_linkedin_search_url, j.hr_contact_source, j.hr_contact_confidence,
+  r.name AS resume_name, r.file_url AS resume_url
+FROM public.job_applications a
+JOIN public.job_listings j ON a.job_listing_id = j.id
+LEFT JOIN public.resumes r ON a.resume_id = r.id;
+
+
+-- ──────────────────────────────────────────────────────────
+-- >>> 13_experience_in_view.sql
+-- ──────────────────────────────────────────────────────────
+-- Exposes experience_level / min_experience / max_experience through the
+-- application_details view (columns have existed on job_listings since the
+-- base schema). Populated during discovery by services/experience.py.
+-- Self-sufficient regardless of whether 05/06/12 already ran — re-adds every
+-- column the rebuilt view selects, not just the experience ones.
+DO $$ BEGIN
+  CREATE TYPE experience_level AS ENUM ('entry', 'mid', 'senior', 'lead', 'principal', 'executive');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE public.job_listings
+  ADD COLUMN IF NOT EXISTS experience_level experience_level,
+  ADD COLUMN IF NOT EXISTS min_experience INTEGER,
+  ADD COLUMN IF NOT EXISTS max_experience INTEGER,
+  ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS expired_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS expiry_reason TEXT,
+  ADD COLUMN IF NOT EXISTS hr_name TEXT,
+  ADD COLUMN IF NOT EXISTS hr_email TEXT,
+  ADD COLUMN IF NOT EXISTS hr_linkedin_url TEXT,
+  ADD COLUMN IF NOT EXISTS hr_linkedin_search_url TEXT,
+  ADD COLUMN IF NOT EXISTS hr_contact_source TEXT,
+  ADD COLUMN IF NOT EXISTS hr_contact_confidence SMALLINT;
+
+DROP VIEW IF EXISTS public.application_details;
+CREATE OR REPLACE VIEW public.application_details AS
+SELECT
+  a.*,
+  j.title AS job_title, j.company AS job_company,
+  j.company_logo_url, j.location AS job_location,
+  j.work_mode AS job_work_mode, j.job_type,
+  j.experience_level, j.min_experience, j.max_experience,
+  j.salary_min, j.salary_max, j.salary_currency,
+  j.source_platform, j.source_url, j.apply_url,
+  j.is_easy_apply, j.required_skills AS job_required_skills, j.jd_text,
+  j.posted_at AS job_posted_at,
+  j.discovered_at AS job_discovered_at,
+  j.is_active AS job_is_active,
+  j.expired_at AS job_expired_at,
+  j.expiry_reason AS job_expiry_reason,
+  j.hr_name, j.hr_email, j.hr_linkedin_url,
+  j.hr_linkedin_search_url, j.hr_contact_source, j.hr_contact_confidence,
+  r.name AS resume_name, r.file_url AS resume_url
+FROM public.job_applications a
+JOIN public.job_listings j ON a.job_listing_id = j.id
+LEFT JOIN public.resumes r ON a.resume_id = r.id;
+
+-- ──────────────────────────────────────────────────────────
+-- >>> 14_new_sources.sql
+-- ──────────────────────────────────────────────────────────
+-- Jobicy + Himalayas remote boards. Workable/SmartRecruiters/Recruitee ride
+-- the ATS aggregator under 'company_portal' (no enum change needed).
+ALTER TYPE platform ADD VALUE IF NOT EXISTS 'jobicy';
+ALTER TYPE platform ADD VALUE IF NOT EXISTS 'himalayas';

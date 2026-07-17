@@ -49,6 +49,14 @@ class Settings(BaseSettings):
     JSEARCH_RAPIDAPI_KEY: str = ""
     CAREERJET_AFFID: str = ""  # free affiliate id from partners.careerjet.com
 
+    # HR-contact enrichment (optional — verified email / LinkedIn per listing).
+    # No key → each job still gets a keyless LinkedIn people-search link; a key
+    # lights up verified data. hr_email is NEVER guessed — providers only.
+    HR_CONTACT_ENRICHMENT_ENABLED: bool = True
+    HUNTER_API_KEY: str = ""      # hunter.io — verified emails (has a free tier)
+    APOLLO_API_KEY: str = ""      # apollo.io — verified email + LinkedIn URL
+    PROXYCURL_API_KEY: str = ""   # nubela.co/proxycurl — LinkedIn profile URL
+
     # Email (Resend) — optional; email notifications disabled if unset
     RESEND_API_KEY: str = ""
     EMAIL_FROM: str = "noreply@jobplatform.ai"

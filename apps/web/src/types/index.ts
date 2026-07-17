@@ -8,7 +8,8 @@ export type ApplicationStatus =
 export type MatchTier = "auto_apply" | "recommended" | "watchlist" | "archived";
 export type WorkMode = "remote" | "hybrid" | "onsite";
 export type JobType = "full_time" | "part_time" | "contract" | "freelance" | "internship";
-export type Platform = "linkedin" | "naukri" | "indeed" | "wellfound" | "hirist" | "instahyre" | "cutshort" | "glassdoor" | "foundit" | "remoteok" | "weworkremotely" | "iimjobs" | "timesjobs" | "shine" | "freshersworld" | "ycombinator" | "dice" | "ziprecruiter" | "remotive" | "arbeitnow" | "themuse" | "adzuna" | "jooble" | "jsearch" | "careerjet" | "company_portal" | "other";
+export type ExperienceLevel = "entry" | "mid" | "senior" | "lead" | "principal" | "executive";
+export type Platform = "linkedin" | "naukri" | "indeed" | "wellfound" | "hirist" | "instahyre" | "cutshort" | "glassdoor" | "foundit" | "remoteok" | "weworkremotely" | "iimjobs" | "timesjobs" | "shine" | "freshersworld" | "ycombinator" | "dice" | "ziprecruiter" | "remotive" | "arbeitnow" | "themuse" | "adzuna" | "jooble" | "jsearch" | "careerjet" | "jobicy" | "himalayas" | "company_portal" | "other";
 
 export interface DiscoverySource {
   name: Platform;
@@ -53,6 +54,9 @@ export interface JobListing {
   location?: string;
   work_mode?: WorkMode;
   job_type: JobType;
+  experience_level?: ExperienceLevel;
+  min_experience?: number;
+  max_experience?: number;
   salary_min?: number;
   salary_max?: number;
   salary_currency: string;
@@ -64,6 +68,14 @@ export interface JobListing {
   apply_url?: string;
   is_easy_apply: boolean;
   discovered_at: string;
+  // HR contact (see services/hr_contact.py). hr_email / hr_linkedin_url are
+  // verified-only; hr_linkedin_search_url is a keyless people-search link.
+  hr_name?: string;
+  hr_email?: string;
+  hr_linkedin_url?: string;
+  hr_linkedin_search_url?: string;
+  hr_contact_source?: "hunter" | "apollo" | "proxycurl" | "search";
+  hr_contact_confidence?: number;
 }
 
 export interface MatchAnalysis {
@@ -98,6 +110,11 @@ export interface Application {
   company_logo_url?: string;
   job_location?: string;
   job_work_mode?: WorkMode;
+  job_type?: JobType;
+  // Experience requirement (from 13_experience_in_view migration)
+  experience_level?: ExperienceLevel;
+  min_experience?: number;
+  max_experience?: number;
   salary_min?: number;
   salary_max?: number;
   salary_currency?: string;
@@ -112,6 +129,14 @@ export interface Application {
   job_is_active?: boolean;
   job_expired_at?: string;
   job_expiry_reason?: string;
+  // HR contact (from 12_hr_contact migration). Verified email/LinkedIn only when
+  // an enrichment provider is configured; the search link is always present.
+  hr_name?: string;
+  hr_email?: string;
+  hr_linkedin_url?: string;
+  hr_linkedin_search_url?: string;
+  hr_contact_source?: "hunter" | "apollo" | "proxycurl" | "search";
+  hr_contact_confidence?: number;
   // Submission tracking (from 03_application_tracking migration)
   submission_status?: "ready" | "opened" | "submitted" | "failed";
   submission_method?: string;

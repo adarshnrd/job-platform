@@ -1,7 +1,7 @@
 "use client";
 import { Application, PortalCapability } from "@/types";
-import { STATUS_CONFIG, TIER_CONFIG, PLATFORM_LABELS, formatSalary, scoreColor, timeAgo, cn } from "@/lib/utils";
-import { Star, ExternalLink, Zap, BookOpen, MapPin, Clock, XCircle } from "lucide-react";
+import { STATUS_CONFIG, TIER_CONFIG, PLATFORM_LABELS, formatSalary, formatExperience, scoreColor, timeAgo, cn } from "@/lib/utils";
+import { Star, ExternalLink, Zap, BookOpen, MapPin, Clock, XCircle, Mail, Linkedin, Search, BadgeCheck, Briefcase } from "lucide-react";
 import { api } from "@/lib/api";
 import toast from "react-hot-toast";
 import Link from "next/link";
@@ -101,6 +101,11 @@ export function JobCard({ job, onUpdate, portal }: { job: Application; onUpdate:
       {/* Details */}
       <div className="flex items-center gap-3 text-xs text-zinc-500 mb-3">
         {job.job_location && <span className="flex items-center gap-1"><MapPin size={11} />{job.job_location}</span>}
+        {formatExperience(job.min_experience, job.max_experience) && (
+          <span className="flex items-center gap-1 text-zinc-400">
+            <Briefcase size={11} />{formatExperience(job.min_experience, job.max_experience)}
+          </span>
+        )}
         {job.job_work_mode && <span className="capitalize">{job.job_work_mode}</span>}
         {(job.salary_min || job.salary_max) && <span>{formatSalary(job.salary_min, job.salary_max, job.salary_currency)}</span>}
         <span className="ml-auto flex items-center gap-1"><Clock size={11} />{timeAgo(job.job_posted_at || job.created_at)}</span>
@@ -117,6 +122,47 @@ export function JobCard({ job, onUpdate, portal }: { job: Application; onUpdate:
           {job.job_required_skills.length > 5 && (
             <span className="text-xs text-zinc-600">+{job.job_required_skills.length - 5}</span>
           )}
+        </div>
+      )}
+
+      {/* HR contact — verified email/profile shown distinctly from a search link */}
+      {(job.hr_email || job.hr_linkedin_url || job.hr_linkedin_search_url) && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3 text-xs">
+          <span className="text-zinc-600">HR</span>
+          {job.hr_email && (
+            <a
+              href={`mailto:${job.hr_email}`}
+              title={`Verified via ${job.hr_contact_source ?? "provider"}${job.hr_contact_confidence ? ` · ${job.hr_contact_confidence}% confidence` : ""}`}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-900/30 text-emerald-300 border border-emerald-800/50 hover:bg-emerald-900/50 transition-colors max-w-full"
+            >
+              <Mail size={11} className="flex-shrink-0" />
+              <span className="truncate">{job.hr_name || job.hr_email}</span>
+              <BadgeCheck size={11} className="flex-shrink-0 opacity-70" />
+            </a>
+          )}
+          {job.hr_linkedin_url ? (
+            <a
+              href={job.hr_linkedin_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Verified LinkedIn profile"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-900/30 text-sky-300 border border-sky-800/50 hover:bg-sky-900/50 transition-colors"
+            >
+              <Linkedin size={11} />
+              {job.hr_name && !job.hr_email ? job.hr_name : "Profile"}
+              <BadgeCheck size={11} className="opacity-70" />
+            </a>
+          ) : job.hr_linkedin_search_url ? (
+            <a
+              href={job.hr_linkedin_search_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Opens a LinkedIn people search — no specific person has been verified"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-zinc-200 transition-colors"
+            >
+              <Search size={11} /> Find HR on LinkedIn
+            </a>
+          ) : null}
         </div>
       )}
 

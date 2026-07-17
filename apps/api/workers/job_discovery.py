@@ -39,12 +39,22 @@ from scrapers.adzuna import AdzunaScraper
 from scrapers.jooble import JoobleScraper
 from scrapers.jsearch import JSearchScraper
 from scrapers.careerjet import CareerjetScraper
+from scrapers.jobicy import JobicyScraper
+from scrapers.himalayas import HimalayasScraper
 from scrapers.ats import ATSAggregatorScraper
 from config import settings
 from services import discovery_progress as progress
 from services.dedup import job_fingerprint
+from services.experience import merge_experience
 
 db = get_db()
+
+# HR-contact columns (migration 12) — stripped from the payload if the live DB
+# hasn't run 12_hr_contact.sql yet. Keep in sync with models.job.JobListingCreate.
+_HR_CONTACT_COLUMNS = (
+    "hr_name", "hr_email", "hr_linkedin_url",
+    "hr_linkedin_search_url", "hr_contact_source", "hr_contact_confidence",
+)
 
 
 class Source:
@@ -95,6 +105,8 @@ SOURCE_REGISTRY: dict[str, Source] = {
     "ats":            Source("ats", ATSAggregatorScraper, True, False, {"india"}),
     "arbeitnow":      Source("arbeitnow", ArbeitnowScraper, True, False, {"global"}),
     "themuse":        Source("themuse", TheMuseScraper, True, False, {"india", "global"}),
+    "jobicy":         Source("jobicy", JobicyScraper, True, False, {"global", "india"}),
+    "himalayas":      Source("himalayas", HimalayasScraper, True, False, {"global", "india"}),
     # ── API-first keyed sources (dormant until keys set) ──
     "adzuna":         Source("adzuna", AdzunaScraper, True, True, {"india", "global"}),
     "jooble":         Source("jooble", JoobleScraper, True, True, {"india", "global"}),
@@ -382,6 +394,29 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
     jd_texts = [job.jd_text for job in raw_jobs]
     parsed_jds = await batch_parse_jds(jd_texts)
 
+    # ── Phase 2.2: fill experience requirements before the listings are stored ──
+    # Precedence: scraper-set > LLM-parsed > regex over the JD (services/experience.py).
+    n_experience = 0
+    for i, job in enumerate(raw_jobs):
+        parsed = parsed_jds[i] if isinstance(parsed_jds[i], dict) else {}
+        if merge_experience(job, parsed):
+            n_experience += 1
+    if n_experience:
+        progress.log(run_id, f"Experience: extracted requirements for {n_experience} listing(s)")
+
+    # ── Phase 2.5: Enrich listings with an HR contact ──
+    # Job sources never carry a recruiter email/LinkedIn, so it is enriched here:
+    # a keyless LinkedIn people-search link always, plus VERIFIED email/profile
+    # when an enrichment provider key is set. Per-company cached, non-fatal.
+    if settings.HR_CONTACT_ENRICHMENT_ENABLED:
+        try:
+            from services.hr_contact import enrich_jobs
+            n_enriched = await enrich_jobs(raw_jobs)
+            if n_enriched:
+                progress.log(run_id, f"HR contact: added contact links to {n_enriched} listing(s)")
+        except Exception as e:
+            logger.warning(f"HR-contact enrichment failed (non-fatal): {e}")
+
     # ── Phase 3: Store job listings in DB ──
     progress.log(run_id, f"Storing {len(raw_jobs)} job listings")
     job_ids = []
@@ -535,32 +570,29 @@ async def _upsert_job_listing(job) -> str | None:
     else:
         job_data["posted_at"] = datetime.utcnow().isoformat()
 
-    try:
-        result = db.table("job_listings").upsert(job_data, on_conflict="source_url").execute()
-        return result.data[0]["id"] if result.data else None
-    except Exception as e:
-        # Pre-migration safety: dedupe_key column not in the DB yet — store
-        # without it. Run database/11_job_dedup.sql for DB-level dedup.
-        if "dedupe_key" in str(e).lower():
-            logger.warning("dedupe_key column missing — run database/11_job_dedup.sql for DB-level dedup.")
-            job_data.pop("dedupe_key", None)
-            try:
-                result = db.table("job_listings").upsert(job_data, on_conflict="source_url").execute()
-                return result.data[0]["id"] if result.data else None
-            except Exception as e2:
-                logger.error(f"Job upsert retry failed: {e2}")
+    # Pre-migration safety: the live DB may lack optional columns/enum values
+    # (dedupe_key from migration 11, hr_* from migration 12, new platform enum
+    # values from 02). PostgREST reports one missing column per attempt, so strip
+    # the offending class and retry — up to a few times to clear a stacked set.
+    for _ in range(4):
+        try:
+            result = db.table("job_listings").upsert(job_data, on_conflict="source_url").execute()
+            return result.data[0]["id"] if result.data else None
+        except Exception as e:
+            err = str(e).lower()
+            if "dedupe_key" in err and "dedupe_key" in job_data:
+                logger.warning("dedupe_key column missing — run database/11_job_dedup.sql for DB-level dedup.")
+                job_data.pop("dedupe_key", None)
+            elif any(k in err for k in ("hr_email", "hr_linkedin", "hr_name", "hr_contact")) \
+                    and any(k in job_data for k in _HR_CONTACT_COLUMNS):
+                logger.warning("hr_* contact columns missing — run database/12_hr_contact.sql to store HR contacts.")
+                for k in _HR_CONTACT_COLUMNS:
+                    job_data.pop(k, None)
+            elif "invalid input value for enum" in err and job_data.get("source_platform") != "other":
+                logger.warning(f"Enum value '{platform_value}' not in DB yet — storing as 'other'. Run 02_api_sources.sql.")
+                job_data["source_platform"] = "other"
+            else:
+                logger.error(f"Job upsert failed: {e}")
                 return None
-        # Pre-migration safety: if the new enum value isn't in the DB yet,
-        # fall back to 'other' so discovery still works. Run database/02_api_sources.sql
-        # to store the real source name.
-        if "invalid input value for enum" in str(e).lower():
-            logger.warning(f"Enum value '{platform_value}' not in DB yet — storing as 'other'. Run 02_api_sources.sql.")
-            job_data["source_platform"] = "other"
-            try:
-                result = db.table("job_listings").upsert(job_data, on_conflict="source_url").execute()
-                return result.data[0]["id"] if result.data else None
-            except Exception as e2:
-                logger.error(f"Job upsert retry failed: {e2}")
-                return None
-        logger.error(f"Job upsert failed: {e}")
-        return None
+    logger.error("Job upsert failed after stripping optional columns")
+    return None

@@ -123,6 +123,15 @@ CREATE TABLE public.job_listings (
   hiring_manager_url TEXT,
   company_size TEXT,
   company_industry TEXT,
+  -- HR contact (enriched by services/hr_contact.py). hr_email / hr_linkedin_url
+  -- are verified-only (provider-sourced); hr_linkedin_search_url is a keyless
+  -- people-search link. See migration 12_hr_contact.sql.
+  hr_name TEXT,
+  hr_email TEXT,
+  hr_linkedin_url TEXT,
+  hr_linkedin_search_url TEXT,
+  hr_contact_source TEXT,
+  hr_contact_confidence SMALLINT,
   discovered_at TIMESTAMPTZ DEFAULT NOW(),
   last_seen_at TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -369,9 +378,12 @@ SELECT
   j.title AS job_title, j.company AS job_company,
   j.company_logo_url, j.location AS job_location,
   j.work_mode AS job_work_mode, j.job_type,
+  j.experience_level, j.min_experience, j.max_experience,
   j.salary_min, j.salary_max, j.salary_currency,
   j.source_platform, j.source_url, j.apply_url,
   j.is_easy_apply, j.required_skills AS job_required_skills, j.jd_text,
+  j.hr_name, j.hr_email, j.hr_linkedin_url,
+  j.hr_linkedin_search_url, j.hr_contact_source, j.hr_contact_confidence,
   r.name AS resume_name, r.file_url AS resume_url
 FROM public.job_applications a
 JOIN public.job_listings j ON a.job_listing_id = j.id

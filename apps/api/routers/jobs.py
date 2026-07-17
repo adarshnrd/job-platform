@@ -7,7 +7,7 @@ from loguru import logger
 from database import get_db
 from models.job import DiscoveryRequest
 from services.ai import parse_job_description
-from services.ranking import filter_and_rank, paginate
+from services.ranking import filter_and_rank, paginate, posted_within
 from workers.job_discovery import run_discovery_for_user
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -15,7 +15,8 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 db_admin = get_db()
 
 
-def _build_jobs_query(db, user_id: str, work_mode=None, is_easy_apply=None, platform_filter=None):
+def _build_jobs_query(db, user_id: str, work_mode=None, is_easy_apply=None, platform_filter=None,
+                      location=None, job_type=None, salary_min=None):
     """Build a fresh application_details query with filters.
 
     Must be called each time because the Supabase query builder is mutable —
@@ -28,6 +29,13 @@ def _build_jobs_query(db, user_id: str, work_mode=None, is_easy_apply=None, plat
         q = q.eq("is_easy_apply", is_easy_apply)
     if platform_filter:
         q = q.eq("source_platform", platform_filter)
+    if location:
+        q = q.ilike("job_location", f"%{location}%")
+    if job_type:
+        q = q.eq("job_type", job_type)
+    if salary_min:
+        # "Pays at least X" — deliberately excludes salary-undisclosed listings.
+        q = q.or_(f"salary_max.gte.{salary_min},salary_min.gte.{salary_min}")
     return q
 
 
@@ -37,18 +45,28 @@ async def list_jobs(
     query: Optional[str] = Query(None),
     platform: Optional[str] = Query(None),
     work_mode: Optional[str] = Query(None),
+    experience: Optional[int] = Query(None, ge=0, le=50),
+    location: Optional[str] = Query(None),
+    job_type: Optional[str] = Query(None),
+    posted_within_days: Optional[int] = Query(None, ge=1, le=365),
+    salary_min: Optional[int] = Query(None, ge=0),
     min_score: int = Query(40),
     show_archived: bool = Query(False),
     is_easy_apply: Optional[bool] = Query(None),
     limit: int = Query(20, le=100),
     offset: int = Query(0),
 ):
-    """List jobs with recency-weighted sorting, relevance threshold, and skill rescue."""
+    """List jobs with recency-weighted sorting, relevance threshold, and skill rescue.
+
+    `experience` is the candidate's years: keeps jobs whose min_experience is at
+    most that, plus jobs that don't state a requirement.
+    """
     try:
         user_res = db_admin.table("users").select("skills").eq("id", user_id).single().execute()
         user_skills = set(user_res.data.get("skills") or []) if user_res.data else set()
 
-        qkw = dict(work_mode=work_mode, is_easy_apply=is_easy_apply, platform_filter=platform)
+        qkw = dict(work_mode=work_mode, is_easy_apply=is_easy_apply, platform_filter=platform,
+                   location=location, job_type=job_type, salary_min=salary_min)
 
         try:
             result = _build_jobs_query(db_admin, user_id, **qkw)\
@@ -61,6 +79,14 @@ async def list_jobs(
         if query:
             ql = query.lower()
             rows = [r for r in rows if ql in (r.get("job_title") or "").lower() or ql in (r.get("job_company") or "").lower()]
+
+        # In Python (not PostgREST) so pre-migration-13 rows without the column
+        # degrade to "unspecified" instead of erroring the whole query.
+        if experience is not None:
+            rows = [r for r in rows if r.get("min_experience") is None or r["min_experience"] <= experience]
+
+        if posted_within_days:
+            rows = posted_within(rows, posted_within_days)
 
         ranked = filter_and_rank(rows, user_skills, min_score, show_archived)
         return paginate(ranked, offset, limit)

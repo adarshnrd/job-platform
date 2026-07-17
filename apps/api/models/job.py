@@ -34,6 +34,8 @@ class Platform(str, Enum):
     jooble = "jooble"
     jsearch = "jsearch"
     careerjet = "careerjet"
+    jobicy = "jobicy"
+    himalayas = "himalayas"
     company_portal = "company_portal"
     other = "other"
 
@@ -90,6 +92,15 @@ class JobListingCreate(BaseModel):
     hiring_manager_url: Optional[str] = None
     company_size: Optional[str] = None
     company_industry: Optional[str] = None
+    # HR contact (populated by services/hr_contact.py enrichment).
+    # hr_email / hr_linkedin_url are verified-only (a provider returned them);
+    # hr_linkedin_search_url is a keyless people-search deep-link, always present.
+    hr_name: Optional[str] = None
+    hr_email: Optional[str] = None
+    hr_linkedin_url: Optional[str] = None
+    hr_linkedin_search_url: Optional[str] = None
+    hr_contact_source: Optional[str] = None       # 'hunter'|'apollo'|'proxycurl'|'search'
+    hr_contact_confidence: Optional[int] = None    # 0..100 for verified data
 
 
 class JobListingOut(JobListingCreate):

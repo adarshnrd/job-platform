@@ -1,11 +1,11 @@
 """
 ATS-direct aggregator — pulls jobs straight from company career boards.
 
-Greenhouse, Lever, and Ashby all expose public, keyless JSON APIs (they power
-companies' own careers pages). No bot-walls, no selectors, no login. One
-"source" here fans out across many company boards, so it is the highest-yield /
-lowest-fragility way to add coverage — especially product/startup roles that
-never hit the big aggregators.
+Greenhouse, Lever, Ashby, Workable, SmartRecruiters, and Recruitee all expose
+public, keyless JSON APIs (they power companies' own careers pages). No
+bot-walls, no selectors, no login. One "source" here fans out across many
+company boards, so it is the highest-yield / lowest-fragility way to add
+coverage — especially product/startup roles that never hit the big aggregators.
 
 Seed boards below are verified India-hiring companies. This is intended to grow
 via a token harvester (parse apply_urls we already collect) — see
@@ -19,7 +19,7 @@ from typing import Optional
 from loguru import logger
 
 from scrapers.api_base import APIBaseScraper
-from models.job import JobListingCreate, Platform
+from models.job import ExperienceLevel, JobListingCreate, Platform
 
 # Verified live 2026-07-07 (each returns real India listings). This is a seed —
 # the harvester (services/ats_harvester.py) grows it automatically from apply
@@ -48,7 +48,37 @@ SEED_BOARDS: list[dict] = [
     # ── Ashby ──
     {"ats": "ashby", "token": "sarvam", "company": "Sarvam AI"},
     {"ats": "ashby", "token": "openai", "company": "OpenAI"},
+    # ── SmartRecruiters (enterprise boards with large India offices;
+    #     verified live 2026-07-16 via ?country=in) ──
+    {"ats": "smartrecruiters", "token": "visa", "company": "Visa"},
+    {"ats": "smartrecruiters", "token": "boschgroup", "company": "Bosch Group"},
+    {"ats": "smartrecruiters", "token": "ubisoft2", "company": "Ubisoft"},
+    {"ats": "smartrecruiters", "token": "servicenow", "company": "ServiceNow"},
+    # ── Workable (few India-office boards publish via the widget API today;
+    #     coverage grows through the harvester as apply URLs surface tokens) ──
+    {"ats": "workable", "token": "huggingface", "company": "Hugging Face"},
+    # ── Recruitee ──
+    {"ats": "recruitee", "token": "hostaway", "company": "Hostaway"},
 ]
+
+# SmartRecruiters' list API has no JD text — each posting needs a detail call.
+# Bounded per board per run so enterprise boards can't stall discovery against
+# the 60/min rate limiter (4 seed boards × cap ≈ one extra minute worst case).
+_SR_DETAIL_CAP = 12
+
+# Recruitee experience_code → our enum.
+_RECRUITEE_LEVELS = {
+    "entry_level": ExperienceLevel.entry, "student": ExperienceLevel.entry,
+    "mid_level": ExperienceLevel.mid, "senior": ExperienceLevel.senior,
+    "executive": ExperienceLevel.executive,
+}
+
+# SmartRecruiters experienceLevel.id (LinkedIn-style) → our enum.
+_SR_LEVELS = {
+    "internship": ExperienceLevel.entry, "entry_level": ExperienceLevel.entry,
+    "associate": ExperienceLevel.mid, "mid_senior_level": ExperienceLevel.senior,
+    "director": ExperienceLevel.lead, "executive": ExperienceLevel.executive,
+}
 
 INDIA_CITY_TOKENS = (
     "india", "bangalore", "bengaluru", "pune", "gurgaon", "gurugram",
@@ -132,7 +162,34 @@ class ATSAggregatorScraper(APIBaseScraper):
         if ats == "ashby":
             data = await self._get_json(f"https://api.ashbyhq.com/posting-api/job-board/{token}")
             return [self._norm_ashby(j, company) for j in (data or {}).get("jobs", [])]
+        if ats == "workable":
+            data = await self._get_json(
+                f"https://apply.workable.com/api/v1/widget/accounts/{token}", params={"details": "true"}
+            )
+            return [self._norm_workable(j, company) for j in (data or {}).get("jobs", [])]
+        if ats == "smartrecruiters":
+            return await self._fetch_smartrecruiters(token, company)
+        if ats == "recruitee":
+            data = await self._get_json(f"https://{token}.recruitee.com/api/offers/")
+            return [self._norm_recruitee(j, company) for j in (data or {}).get("offers", [])]
         return []
+
+    async def _fetch_smartrecruiters(self, token: str, company: str) -> list[dict]:
+        # country=in server-side — enterprise boards carry thousands of global
+        # postings and the newest 100 would otherwise drown out India roles.
+        data = await self._get_json(
+            f"https://api.smartrecruiters.com/v1/companies/{token}/postings",
+            params={"limit": 100, "country": "in"},
+        )
+        items = (data or {}).get("content", [])
+        # The list API has no JD text; detail calls are the expensive part.
+        out: list[dict] = []
+        for it in items[:_SR_DETAIL_CAP]:
+            detail = await self._get_json(
+                f"https://api.smartrecruiters.com/v1/companies/{token}/postings/{it.get('id')}"
+            )
+            out.append(self._norm_smartrecruiters(it, detail or {}, company, token))
+        return out
 
     # ── Per-ATS normalization to a common dict ──
     @staticmethod
@@ -170,6 +227,55 @@ class ATSAggregatorScraper(APIBaseScraper):
             "posted_at": _parse_iso(j.get("publishedAt")), "remote": bool(j.get("isRemote")),
         }
 
+    @staticmethod
+    def _norm_workable(j: dict, company: str) -> dict:
+        loc = ", ".join(p for p in (j.get("city"), j.get("state"), j.get("country")) if p)
+        return {
+            "title": (j.get("title") or "").strip(), "company": company,
+            "location": loc or "India", "source_url": j.get("url") or "",
+            "apply_url": j.get("application_url") or j.get("url") or "",
+            "jd_text": _HTML.sub(" ", j.get("description") or ""),
+            "posted_at": _parse_iso(j.get("published_on") or j.get("created_at")),
+            "remote": bool(j.get("telecommuting")),
+        }
+
+    @staticmethod
+    def _sr_location(it: dict) -> str:
+        loc = it.get("location") or {}
+        country = (loc.get("country") or "").lower()
+        parts = [loc.get("city") or "", "India" if country == "in" else country]
+        return ", ".join(p for p in parts if p)
+
+    def _norm_smartrecruiters(self, it: dict, detail: dict, company: str, token: str) -> dict:
+        sections = ((detail.get("jobAd") or {}).get("sections") or {})
+        jd = " ".join(
+            _HTML.sub(" ", (sections.get(k) or {}).get("text") or "")
+            for k in ("jobDescription", "qualifications", "additionalInformation")
+        ).strip()
+        url = f"https://jobs.smartrecruiters.com/{token}/{it.get('id')}"
+        return {
+            "title": (it.get("name") or "").strip(),
+            "company": (it.get("company") or {}).get("name") or company,
+            "location": self._sr_location(it) or "India",
+            "source_url": url, "apply_url": url, "jd_text": jd,
+            "posted_at": _parse_iso(it.get("releasedDate")),
+            "remote": bool((it.get("location") or {}).get("remote")),
+            "experience_level": _SR_LEVELS.get(((it.get("experienceLevel") or {}).get("id") or "")),
+        }
+
+    @staticmethod
+    def _norm_recruitee(j: dict, company: str) -> dict:
+        loc = j.get("location") or ", ".join(p for p in (j.get("city"), j.get("country")) if p)
+        jd = _HTML.sub(" ", f"{j.get('description') or ''} {j.get('requirements') or ''}")
+        return {
+            "title": (j.get("title") or "").strip(), "company": company,
+            "location": loc or "India", "source_url": j.get("careers_url") or "",
+            "apply_url": j.get("careers_url") or "", "jd_text": jd,
+            "posted_at": _parse_iso(j.get("created_at")),
+            "remote": str(j.get("remote")).lower() in ("true", "fully"),
+            "experience_level": _RECRUITEE_LEVELS.get(j.get("experience_code") or ""),
+        }
+
     # ── Filtering ──
     @staticmethod
     def _is_india(job: dict) -> bool:
@@ -197,6 +303,7 @@ class ATSAggregatorScraper(APIBaseScraper):
             location=job["location"],
             work_mode="remote" if job.get("remote") else None,
             is_remote_friendly=job.get("remote", False),
+            experience_level=job.get("experience_level"),
             jd_text=jd or job["title"],
             source_platform=self.platform,
             source_url=job["source_url"],

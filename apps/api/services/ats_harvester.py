@@ -28,7 +28,8 @@ _lock = threading.Lock()
 
 # Tokens that are ATS infrastructure, not a company board.
 _TOKEN_BLOCKLIST = {"embed", "job_board", "jobs", "api", "v1", "v0", "boards",
-                    "posting-api", "job-board", "www", "for", "share", "list"}
+                    "posting-api", "job-board", "www", "for", "share", "list",
+                    "j", "widget", "accounts", "careers", "offers"}
 
 # URL → (ats, token). Ordered; first match wins. Tokens are the URL path segment
 # right after the ATS host (Greenhouse also supports an ?for=<token> embed form).
@@ -37,6 +38,9 @@ _PATTERNS: list[tuple[str, re.Pattern]] = [
     ("greenhouse", re.compile(r"greenhouse\.io/embed/job_board\?for=([a-z0-9][a-z0-9._-]*)", re.I)),
     ("lever",      re.compile(r"(?:jobs\.lever\.co|api\.lever\.co/v0/postings)/([a-z0-9][a-z0-9._-]*)", re.I)),
     ("ashby",      re.compile(r"(?:jobs\.ashbyhq\.com|api\.ashbyhq\.com/posting-api/job-board)/([a-z0-9][a-z0-9._-]*)", re.I)),
+    ("workable",   re.compile(r"apply\.workable\.com/(?:api/v1/widget/accounts/)?([a-z0-9][a-z0-9._-]*)", re.I)),
+    ("smartrecruiters", re.compile(r"(?:jobs\.smartrecruiters\.com|api\.smartrecruiters\.com/v1/companies)/([a-z0-9][a-z0-9._-]*)", re.I)),
+    ("recruitee",  re.compile(r"https?://([a-z0-9][a-z0-9-]*)\.recruitee\.com", re.I)),
 ]
 
 
@@ -115,6 +119,33 @@ async def _validate(client: httpx.AsyncClient, ats: str, token: str) -> Optional
             if r.status_code != 200:
                 return None
             jobs = r.json().get("jobs", [])
+            if not jobs:
+                return None
+            return {"company": _titlecase(token), "jobs": len(jobs)}
+        if ats == "workable":
+            r = await client.get(f"https://apply.workable.com/api/v1/widget/accounts/{token}")
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            jobs = data.get("jobs", [])
+            if not jobs:
+                return None
+            return {"company": (data.get("name") or "").strip() or _titlecase(token), "jobs": len(jobs)}
+        if ats == "smartrecruiters":
+            r = await client.get(f"https://api.smartrecruiters.com/v1/companies/{token}/postings", params={"limit": 1})
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            total = data.get("totalFound") or len(data.get("content") or [])
+            if not total:
+                return None
+            company = _company_from_jobs([(c.get("company") or {}) for c in data.get("content") or []], "name")
+            return {"company": company or _titlecase(token), "jobs": total}
+        if ats == "recruitee":
+            r = await client.get(f"https://{token}.recruitee.com/api/offers/")
+            if r.status_code != 200:
+                return None
+            jobs = r.json().get("offers", [])
             if not jobs:
                 return None
             return {"company": _titlecase(token), "jobs": len(jobs)}

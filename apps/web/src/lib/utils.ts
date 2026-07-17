@@ -14,6 +14,13 @@ export function formatSalary(min?: number, max?: number, currency = "INR"): stri
   return `Up to ${fmt(max!)}`;
 }
 
+export function formatExperience(min?: number | null, max?: number | null): string | null {
+  if (min == null && max == null) return null;
+  if (min != null && max != null) return min === max ? `${min} yrs` : `${min}–${max} yrs`;
+  if (min != null) return min === 0 ? "Fresher" : `${min}+ yrs`;
+  return `Up to ${max} yrs`;
+}
+
 export function formatDate(dateStr?: string): string {
   if (!dateStr) return "";
   return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(new Date(dateStr));
@@ -65,6 +72,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   dice: "Dice", ziprecruiter: "ZipRecruiter", remotive: "Remotive",
   arbeitnow: "Arbeitnow", themuse: "The Muse", adzuna: "Adzuna",
   jooble: "Jooble", jsearch: "JSearch (Google Jobs)", careerjet: "Careerjet",
+  jobicy: "Jobicy", himalayas: "Himalayas",
   company_portal: "Company Portal", other: "Other",
 };
 
