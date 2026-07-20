@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     SCRAPER_ALLOW_HEADED: bool = True   # let bot-walled boards open a visible window
     BROWSER_TIMEOUT_MS: int = 30000
     MAX_APPLY_RETRIES: int = 3
+    # Gates the *automatic* discovery cron only (registered in scheduler.py on
+    # every app startup/deploy). Defaults OFF so a restart/redeploy never starts
+    # scraping platforms on its own — set to true in .env to arm it. Manual
+    # discovery from the UI (POST /jobs/discover) is a separate code path and
+    # always works regardless of this flag.
+    DISCOVERY_SCHEDULER_ENABLED: bool = False
     DISCOVERY_INTERVAL_HOURS: int = 4
     MAX_JOBS_PER_DISCOVERY: int = 50
     DISCOVERY_MAX_SEARCHES_PER_SOURCE: int = 6

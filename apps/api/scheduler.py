@@ -206,13 +206,24 @@ def start_scheduler():
     if scheduler.running:
         return
 
-    scheduler.add_job(
-        _run_discovery_all_users,
-        CronTrigger(hour=f"*/{settings.DISCOVERY_INTERVAL_HOURS}"),
-        id="discover_jobs",
-        name="Job discovery for all users",
-        replace_existing=True,
-    )
+    # Automatic discovery cron is opt-in (DISCOVERY_SCHEDULER_ENABLED, default
+    # False) so a restart/redeploy never starts scraping job platforms on its
+    # own. Manual discovery from the UI (POST /jobs/discover) is unaffected —
+    # it runs via BackgroundTasks, not this scheduler, regardless of this flag.
+    if settings.DISCOVERY_SCHEDULER_ENABLED:
+        scheduler.add_job(
+            _run_discovery_all_users,
+            CronTrigger(hour=f"*/{settings.DISCOVERY_INTERVAL_HOURS}"),
+            id="discover_jobs",
+            name="Job discovery for all users",
+            replace_existing=True,
+        )
+        logger.info(f"Automatic discovery cron ARMED — every {settings.DISCOVERY_INTERVAL_HOURS}h")
+    else:
+        logger.info(
+            "Automatic discovery cron DISABLED (DISCOVERY_SCHEDULER_ENABLED=false) — "
+            "manual discovery from the UI still works normally."
+        )
 
     scheduler.add_job(
         _process_apply_queue,
