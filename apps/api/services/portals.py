@@ -67,9 +67,10 @@ PORTALS: dict[str, PortalCapabilities] = {
         requires_session=True, anti_bot="medium",
     ),
     "foundit": PortalCapabilities(
-        "foundit", "Foundit", "A", ("india",),
+        "foundit", "Foundit", "A", ("india", "global"),
         auto_apply=True, resume_upload=True, question_detection=True,
         requires_session=True, anti_bot="medium", aliases=("monster",),
+        notes="Discovery via the site's own JSON API; also covers SG/ID/HK boards.",
     ),
     "hirist": PortalCapabilities(
         "hirist", "Hirist", "A", ("india",),
@@ -115,7 +116,9 @@ PORTALS: dict[str, PortalCapabilities] = {
         "wellfound", "Wellfound", "B", ("india", "global"),
         assisted_apply=True, resume_upload=True, question_detection=True,
         requires_session=True, anti_bot="high", aliases=("angellist", "angel.co"),
-        notes="Founder-note applies; automatable but risky, kept assisted.",
+        search=False,
+        notes="Discovery unavailable: the bot wall returns 403 to headless AND "
+              "headed browsers alike. Display + assisted apply only.",
     ),
     "indeed": PortalCapabilities(
         "indeed", "Indeed", "B", ("india", "global"),
@@ -163,10 +166,28 @@ PORTALS: dict[str, PortalCapabilities] = {
     "ziprecruiter": PortalCapabilities(
         "ziprecruiter", "ZipRecruiter", "C", ("global",), anti_bot="high",
     ),
+    "arc": PortalCapabilities(
+        "arc", "Arc", "C", ("global",), anti_bot="low",
+        notes="Remote-first developer roles; cards carry pay band, seniority and "
+              "skills inline. Country-scoped boards at /en-{cc}/remote-jobs.",
+    ),
+    "welcometothejungle": PortalCapabilities(
+        "welcometothejungle", "Welcome to the Jungle", "C", ("global",),
+        anti_bot="medium", aliases=("wttj", "otta"),
+        notes="Sitemap + schema.org JobPosting; a headed browser clears the AWS "
+              "WAF once, then fetches run over HTTP. Strong EU/UK coverage.",
+    ),
+    "peerlist": PortalCapabilities(
+        "peerlist", "Peerlist", "C", ("global", "india"),
+        anti_bot="high",
+        notes="Listing pages need a headed browser (Cloudflare 403s headless); "
+              "detail pages stay walled, so JDs are usually unavailable. Opt-in.",
+    ),
     "flexjobs": PortalCapabilities(
         "flexjobs", "FlexJobs", "C", ("global",),
         requires_session=True, anti_bot="medium",
-        notes="Paywalled; display-only using the user's own subscription. Off by default.",
+        notes="Paywalled. Only the free /publicjobs tier is read, and those links "
+              "commonly resolve to removed postings (410). Opt-in.",
     ),
 
     # ── Documented-unsupported (kept visible so the UI can explain why) ───

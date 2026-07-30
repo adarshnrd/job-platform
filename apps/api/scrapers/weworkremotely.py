@@ -1,103 +1,163 @@
 """
-WeWorkRemotely scraper — uses their RSS feeds (no Playwright needed).
+We Work Remotely — remote-only board, global.
+
+The HTML board is Cloudflare-fronted, but the per-category RSS feeds are public
+and complete, so this stays an HTTP source. Feeds are fetched concurrently and
+merged; each carries the full JD in its <description>, so no detail fetch is
+needed.
+
+Titles follow "Company: Role Title" (older items use "Company | Role"), which
+is the only place the employer name appears in the feed.
 """
-from datetime import datetime
-from loguru import logger
-import httpx
-import xml.etree.ElementTree as ET
-import html
+from __future__ import annotations
+
+import asyncio
+import html as html_lib
 import re
-from scrapers.base import BaseScraper
-from models.job import JobListingCreate, Platform
+import xml.etree.ElementTree as ET
+from typing import Optional
+
+from loguru import logger
+
+from models.job import JobListingCreate, JobType, Platform, WorkMode
+from scrapers.api_base import APIBaseScraper
+
+BASE = "https://weworkremotely.com"
+RSS_FEEDS = (
+    f"{BASE}/categories/remote-programming-jobs.rss",
+    f"{BASE}/categories/remote-devops-sysadmin-jobs.rss",
+    f"{BASE}/categories/remote-design-jobs.rss",
+    f"{BASE}/categories/remote-product-jobs.rss",
+    f"{BASE}/categories/remote-customer-support-jobs.rss",
+    f"{BASE}/categories/remote-sales-and-marketing-jobs.rss",
+    f"{BASE}/categories/remote-management-and-finance-jobs.rss",
+    f"{BASE}/remote-jobs.rss",
+)
+
+_HTML = re.compile(r"<[^>]+>")
+_STOPWORDS = {"the", "and", "for", "with", "job", "jobs", "role", "roles"}
+_JOB_TYPES: dict[str, JobType] = {
+    "contract": JobType.contract, "contractor": JobType.contract,
+    "freelance": JobType.freelance,
+    "part-time": JobType.part_time, "part time": JobType.part_time,
+    "internship": JobType.internship, "intern": JobType.internship,
+}
 
 
-RSS_FEEDS = [
-    "https://weworkremotely.com/remote-jobs.rss",
-    "https://weworkremotely.com/categories/remote-programming-jobs.rss",
-    "https://weworkremotely.com/categories/remote-devops-sysadmin-jobs.rss",
-    "https://weworkremotely.com/categories/remote-design-jobs.rss",
-    "https://weworkremotely.com/categories/remote-product-jobs.rss",
-]
-
-
-class WeWorkRemotelyScraper(BaseScraper):
+class WeWorkRemotelyScraper(APIBaseScraper):
     platform = Platform.weworkremotely
-    rate_limit_per_minute = 6
+    requires_key = False
+    regions = {"global"}
+    rate_limit_per_minute = 12
 
-    async def search_jobs(self, query: str, location: str = "Remote", max_results: int = 50) -> list[JobListingCreate]:
+    DEFAULT_HEADERS = {
+        "User-Agent": "Mozilla/5.0 (compatible; JobPlatformBot/1.0)",
+        "Accept": "application/rss+xml, application/xml, text/xml",
+    }
+
+    async def search_jobs(
+        self,
+        query: str,
+        location: str = "Remote",
+        max_results: int = 50,
+        credentials: Optional[dict] = None,
+        region: str = "global",
+    ) -> list[JobListingCreate]:
+        tokens = [
+            t for t in re.split(r"[^a-z0-9.+#]+", (query or "").lower())
+            if len(t) >= 2 and t not in _STOPWORDS
+        ]
+
+        feeds = await asyncio.gather(
+            *(self._fetch_feed(url) for url in RSS_FEEDS), return_exceptions=True
+        )
+
         jobs: list[JobListingCreate] = []
-        query_lower = query.lower()
-        keywords = query_lower.split()
+        for feed in feeds:
+            if not isinstance(feed, str) or not feed:
+                continue
+            try:
+                root = ET.fromstring(feed)
+            except ET.ParseError as e:
+                logger.debug(f"WWR: feed parse failed: {e}")
+                continue
 
-        try:
-            headers = {"User-Agent": "Mozilla/5.0 (compatible; JobPlatformBot/1.0)"}
-            async with httpx.AsyncClient(timeout=30, headers=headers) as client:
-                for feed_url in RSS_FEEDS:
-                    try:
-                        resp = await client.get(feed_url)
-                        resp.raise_for_status()
-                        root = ET.fromstring(resp.text)
+            for item in root.findall(".//item"):
+                job = self._to_listing(item, tokens)
+                if job:
+                    jobs.append(job)
+                    if len(jobs) >= max_results:
+                        logger.info(f"WWR: returning {len(jobs)} jobs for '{query}'")
+                        return jobs
 
-                        for item in root.findall(".//item"):
-                            title_el = item.find("title")
-                            link_el = item.find("link")
-                            desc_el = item.find("description")
-                            region_el = item.find("region")
-
-                            if title_el is None or link_el is None:
-                                continue
-
-                            title_text = title_el.text or ""
-                            combined = title_text.lower()
-                            if desc_el is not None and desc_el.text:
-                                combined += " " + html.unescape(desc_el.text).lower()
-
-                            if not any(kw in combined for kw in keywords):
-                                continue
-
-                            url = link_el.text or ""
-                            if url in self._seen_urls:
-                                continue
-                            self._seen_urls.add(url)
-
-                            # Title format: "CompanyName | Role Title"
-                            parts = title_text.split("|", 1)
-                            company = parts[0].strip() if len(parts) > 1 else "Unknown"
-                            role = parts[1].strip() if len(parts) > 1 else title_text.strip()
-
-                            raw_desc = html.unescape(desc_el.text or "") if desc_el is not None else ""
-                            clean_desc = re.sub(r"<[^>]+>", " ", raw_desc).strip()
-
-                            jobs.append(JobListingCreate(
-                                title=role,
-                                company=company,
-                                location=region_el.text or "Worldwide",
-                                work_mode="remote",
-                                is_remote_friendly=True,
-                                source_platform=self.platform,
-                                source_url=url,
-                                apply_url=url,
-                                jd_text=clean_desc or f"{role} at {company}",
-                                discovered_at=datetime.utcnow(),
-                            ))
-
-                            if len(jobs) >= max_results:
-                                return jobs
-
-                        await self.rate_limiter.acquire()
-                    except Exception as feed_err:
-                        logger.debug(f"WWR feed error {feed_url}: {feed_err}")
-                        continue
-
-        except Exception as e:
-            logger.error(f"WeWorkRemotely search failed for '{query}': {e}")
+        logger.info(f"WWR: returning {len(jobs)} jobs for '{query}'")
         return jobs
 
-    async def get_job_details(self, job: JobListingCreate) -> JobListingCreate:
-        return job
+    async def _fetch_feed(self, url: str) -> str:
+        await self.rate_limiter.acquire()
+        try:
+            resp = await self._client.get(url)
+            resp.raise_for_status()
+            return resp.text
+        except Exception as e:
+            logger.debug(f"WWR: feed fetch failed for {url}: {e}")
+            return ""
 
-    async def __aenter__(self):
-        return self
+    def _to_listing(self, item: ET.Element, tokens: list[str]) -> Optional[JobListingCreate]:
+        def text_of(tag: str) -> str:
+            el = item.find(tag)
+            return (el.text or "").strip() if el is not None and el.text else ""
 
-    async def __aexit__(self, *args):
-        pass
+        raw_title = text_of("title")
+        url = text_of("link")
+        if not raw_title or not url:
+            return None
+
+        description = html_lib.unescape(text_of("description"))
+        jd = self._clean_text(_HTML.sub(" ", description))
+
+        if tokens and not any(t in f"{raw_title} {jd}".lower() for t in tokens):
+            return None
+        if not self._is_new(url):
+            return None
+
+        company, title = self._split_title(raw_title)
+        blob = f"{raw_title} {jd}".lower()
+
+        return JobListingCreate(
+            title=title,
+            company=company,
+            location=text_of("region") or "Worldwide",
+            work_mode=WorkMode.remote,
+            is_remote_friendly=True,
+            job_type=self.match_terms(blob, _JOB_TYPES, JobType.full_time),
+            salary_currency="USD",
+            jd_text=jd or f"{title} at {company}.",
+            source_platform=self.platform,
+            source_url=url,
+            apply_url=url,
+            source_job_id=url.rstrip("/").split("/")[-1] or None,
+            posted_at=self._parse_pubdate(text_of("pubDate")),
+        )
+
+    @staticmethod
+    def _split_title(raw: str) -> tuple[str, str]:
+        """"Company: Role" (current) or "Company | Role" (older items)."""
+        for sep in (":", "|"):
+            if sep in raw:
+                company, _, role = raw.partition(sep)
+                company, role = company.strip(), role.strip()
+                if company and role:
+                    return company, role
+        return "Company (via WWR)", raw.strip()
+
+    @staticmethod
+    def _parse_pubdate(value: str):
+        """RSS pubDate is RFC-822, which the base ISO/epoch parser can't read."""
+        if not value:
+            return None
+        try:
+            from email.utils import parsedate_to_datetime
+            return parsedate_to_datetime(value).replace(tzinfo=None)
+        except Exception:
+            return None

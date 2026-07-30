@@ -93,21 +93,27 @@ _HTML = re.compile(r"<[^>]+>")
 class ATSAggregatorScraper(APIBaseScraper):
     platform = Platform.company_portal
     requires_key = False
-    regions = {"india"}
+    regions = {"india", "global"}
     rate_limit_per_minute = 60
 
     def __init__(self):
         super().__init__()
         self._all_jobs: Optional[list[dict]] = None  # loaded once per run, then filtered
 
-    async def search_jobs(self, query: str, location: str = "India", max_results: int = 50, credentials=None) -> list[JobListingCreate]:
+    async def search_jobs(self, query: str, location: str = "India", max_results: int = 50,
+                          credentials=None, region: str = "india") -> list[JobListingCreate]:
         await self._ensure_loaded()
         tokens = [t for t in re.split(r"[^a-z0-9.+#]+", query.lower()) if len(t) >= 3 and t not in _STOPWORDS]
         loc_low = (location or "").lower()
-        want_any_india = (not loc_low) or loc_low in ("india", "")
+        # On a global run an empty/greedy location must not be read as "India".
+        want_any_india = region == "india" and ((not loc_low) or loc_low in ("india", ""))
 
         out: list[JobListingCreate] = []
         for job in self._all_jobs or []:
+            # The board cache is region-agnostic; India runs drop the overseas
+            # roles these same boards carry, global runs keep them.
+            if region == "india" and not self._is_india(job):
+                continue
             if not self._location_ok(job, loc_low, want_any_india):
                 continue
             if tokens and not self._query_ok(job, tokens):
@@ -133,10 +139,11 @@ class ATSAggregatorScraper(APIBaseScraper):
                 logger.warning(f"ATS board {board['ats']}/{board['token']} failed: {res}")
                 continue
             jobs.extend(res)
-        # Keep only India-relevant jobs — the seed is India companies but boards
-        # also carry their global roles.
-        self._all_jobs = [j for j in jobs if self._is_india(j)]
-        logger.info(f"ATS: loaded {len(self._all_jobs)} India jobs from {len(boards)} boards")
+        # Cached unfiltered: the fetch is identical for both regions, and only
+        # the filter differs, so search_jobs narrows per region instead. This
+        # keeps a region switch from re-hitting every board.
+        self._all_jobs = jobs
+        logger.info(f"ATS: loaded {len(jobs)} jobs from {len(boards)} boards")
 
     @staticmethod
     def _boards() -> list[dict]:

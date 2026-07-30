@@ -102,14 +102,23 @@ async def coverage(days: int = 14, user_id: str = Depends(get_user_id)):
 
 
 def _user_region(user_id: str) -> str:
-    """Infer the user's discovery region from their preferred locations."""
+    """The user's discovery region — explicit choice first, else inferred."""
     from database import get_db
-    from workers.job_discovery import infer_region
+    from workers.job_discovery import resolve_region
     try:
-        res = get_db().table("users").select("preferred_locations").eq("id", user_id).single().execute()
-        return infer_region((res.data or {}).get("preferred_locations"))
+        res = get_db().table("users").select(
+            "preferred_locations, discovery_region"
+        ).eq("id", user_id).single().execute()
+        return resolve_region(res.data or {})
     except Exception:
-        return "india"
+        # Pre-migration: discovery_region may not exist — fall back to inference.
+        try:
+            res = get_db().table("users").select(
+                "preferred_locations"
+            ).eq("id", user_id).single().execute()
+            return resolve_region(res.data or {})
+        except Exception:
+            return "india"
 
 
 @router.get("/ai-usage")

@@ -98,6 +98,57 @@ async def test_dedupes_within_run(monkeypatch, greenhouse):
     assert first and second == []  # already-seen URLs not re-emitted
 
 
+@pytest.mark.asyncio
+async def test_region_controls_whether_overseas_roles_are_kept(monkeypatch):
+    """India seed companies also post abroad; a global run wants exactly those."""
+    s = ATSAggregatorScraper()
+    s._all_jobs = [
+        {"title": "Backend Engineer", "location": "Bangalore, India",
+         "source_url": "https://boards.test/in-1", "company": "Groww",
+         "jd_text": "Build backend services.", "remote": False},
+        {"title": "Backend Engineer", "location": "Berlin, Germany",
+         "source_url": "https://boards.test/de-1", "company": "Groww",
+         "jd_text": "Build backend services.", "remote": False},
+    ]
+
+    async def noop():
+        return None
+    monkeypatch.setattr(s.rate_limiter, "acquire", noop)
+
+    india = await s.search_jobs("backend", "", max_results=10, region="india")
+    assert [j.source_url for j in india] == ["https://boards.test/in-1"]
+
+    s._seen_urls.clear()  # dedup is per-run, not per-region
+    glob = await s.search_jobs("backend", "", max_results=10, region="global")
+    assert {j.source_url for j in glob} == {
+        "https://boards.test/in-1", "https://boards.test/de-1"
+    }
+
+
+@pytest.mark.asyncio
+async def test_board_cache_survives_a_region_switch(monkeypatch):
+    """Boards are fetched once per run: the fetch is region-agnostic and only
+    the filter differs, so switching region must not re-hit every board."""
+    s = ATSAggregatorScraper()
+    fetches = {"n": 0}
+
+    async def counting_fetch(board):
+        fetches["n"] += 1
+        return []
+    monkeypatch.setattr(s, "_fetch_board", counting_fetch)
+    monkeypatch.setattr(ATSAggregatorScraper, "_boards", staticmethod(
+        lambda: [{"ats": "greenhouse", "token": "acme", "company": "Acme"}]
+    ))
+
+    async def noop():
+        return None
+    monkeypatch.setattr(s.rate_limiter, "acquire", noop)
+
+    await s.search_jobs("x", "", region="india")
+    await s.search_jobs("x", "", region="global")
+    assert fetches["n"] == 1, "board list should be fetched once, not per region"
+
+
 def test_seed_boards_are_well_formed():
     from scrapers.ats import SEED_BOARDS
     assert SEED_BOARDS

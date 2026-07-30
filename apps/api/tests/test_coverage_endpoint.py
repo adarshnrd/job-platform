@@ -35,8 +35,12 @@ async def test_coverage_shape_and_totals(monkeypatch):
     assert by_name["naukri"]["scheduling"] == "running"
     assert by_name["naukri"]["jobs_found"] == 120
     assert by_name["naukri"]["kind"] == "browser"
-    # foundit is C-tier (discoverable=False) → display-only, not "backed_off"
-    assert by_name["foundit"]["scheduling"] == "c_tier"
+    # foundit is a discoverable API source now, so a health flag backs it off
+    # (C-tier sources are excluded before health is ever consulted).
+    assert by_name["foundit"]["scheduling"] == "backed_off"
+    assert by_name["foundit"]["kind"] == "api"
+    # C-tier (discoverable=False) stays display-only regardless of health.
+    assert by_name["instahyre"]["scheduling"] == "c_tier"
     # keyed sources with no key are dormant
     assert by_name["careerjet"]["scheduling"] == "dormant"
     assert by_name["ats"]["kind"] == "ats"

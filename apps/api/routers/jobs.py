@@ -189,23 +189,40 @@ async def trigger_discovery(
     """Manually trigger job discovery for the current user."""
     from services import discovery_progress as progress
 
+    region = _resolve_request_region(request, user_id)
+
     # Don't stack a second run while one is in flight — return the live one.
     existing = progress.active_run_id(user_id)
     if existing:
         return {
             "success": True,
-            "region": request.region,
+            "region": region,
             "run_id": existing,
             "already_running": True,
             "message": "A discovery run is already in progress — watch it on the Search Activity page.",
         }
 
-    run_id = progress.start_run(user_id, request.region, trigger="manual")
-    background_tasks.add_task(run_discovery_for_user, user_id, request.region, "manual", run_id)
+    run_id = progress.start_run(user_id, region, trigger="manual")
+    background_tasks.add_task(run_discovery_for_user, user_id, region, "manual", run_id)
     return {
         "success": True,
-        "region": request.region,
+        "region": region,
         "run_id": run_id,
         "already_running": False,
-        "message": f"Job discovery started ({request.region}). You'll be notified when complete.",
+        "message": f"Job discovery started ({region}). You'll be notified when complete.",
     }
+
+
+def _resolve_request_region(request: DiscoveryRequest, user_id: str) -> str:
+    """Explicit region from the request, else the user's saved preference."""
+    if request.region:
+        return request.region
+    from workers.job_discovery import resolve_region
+    try:
+        res = get_db().table("users").select(
+            "preferred_locations, discovery_region"
+        ).eq("id", user_id).single().execute()
+        return resolve_region(res.data or {})
+    except Exception:
+        # Pre-migration (no discovery_region column) or lookup failure — infer.
+        return "india"

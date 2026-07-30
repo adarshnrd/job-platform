@@ -164,6 +164,23 @@ class BaseScraper(ABC):
         return text
 
     @staticmethod
+    def match_terms(haystack: str, mapping: dict, default=None):
+        """First mapping value whose key appears in `haystack` as a whole word.
+
+        Substring matching is wrong for the short keys these lookups use:
+        "vp" hits inside "ADVPL", "ai" inside "email", "go" inside "Django".
+        Keys may be multi-word ("part time") or contain punctuation ("part-time",
+        ".net", "c#"), so the boundary is asserted on non-word characters rather
+        than with \\b, which would never match a key ending in "#" or "+".
+        """
+        import re
+        text = (haystack or "").lower()
+        for key, value in mapping.items():
+            if re.search(rf"(?<![\w#+.]){re.escape(str(key).lower())}(?![\w#+.])", text):
+                return value
+        return default
+
+    @staticmethod
     def parse_relative_date(text: str) -> datetime | None:
         """Parse 'Posted X days/hours ago', 'Just now', 'Today', etc. into a datetime."""
         if not text:

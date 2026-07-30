@@ -53,6 +53,10 @@ class ProfileBase(BaseModel):
     target_roles: list[str] = []
     target_companies: list[str] = []
     preferred_locations: list[str] = []
+    # "india" | "global" | None. Overrides region inference from
+    # preferred_locations, so someone based in India can target roles abroad
+    # without deleting their home cities. None = infer.
+    discovery_region: Optional[str] = None
     open_to_remote: bool = True
     min_salary: Optional[int] = None
     max_salary: Optional[int] = None

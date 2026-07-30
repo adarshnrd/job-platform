@@ -3,6 +3,7 @@ from workers.job_discovery import (
     SOURCE_REGISTRY,
     build_search_pairs,
     infer_region,
+    resolve_region,
     select_sources,
 )
 
@@ -35,13 +36,39 @@ def test_ctier_sources_are_never_discovered():
     """Hard bot-walls stay registered (for display/apply) but skip discovery."""
     india = {s.name for s in select_sources("india", [])}
     glob = {s.name for s in select_sources("global", [])}
-    for walled in ("indeed", "instahyre", "freshersworld", "cutshort", "foundit", "wellfound"):
+    for walled in (
+        "indeed", "instahyre", "freshersworld", "cutshort", "wellfound",
+        "peerlist", "flexjobs",
+    ):
         assert walled in SOURCE_REGISTRY, f"{walled} should remain registered"
         assert SOURCE_REGISTRY[walled].discoverable is False
         assert walled not in india and walled not in glob
 
     # Even an explicit opt-in cannot force a C-tier source into a run.
-    assert "foundit" not in {s.name for s in select_sources("india", ["foundit"])}
+    assert "wellfound" not in {s.name for s in select_sources("india", ["wellfound"])}
+
+
+def test_foundit_is_discovered_as_an_api_source():
+    """Foundit moved from a bot-walled browser scraper to the site's JSON API."""
+    src = SOURCE_REGISTRY["foundit"]
+    assert src.api_based is True
+    assert src.discoverable is True
+    assert {"india", "global"} <= src.regions
+    # API sources run without opt-in, in both regions.
+    assert "foundit" in {s.name for s in select_sources("india", [])}
+    assert "foundit" in {s.name for s in select_sources("global", [])}
+
+
+def test_new_global_sources_are_registered():
+    for name in ("arc", "welcometothejungle"):
+        assert name in SOURCE_REGISTRY
+        assert SOURCE_REGISTRY[name].discoverable is True
+        assert "global" in SOURCE_REGISTRY[name].regions
+
+    glob = {s.name for s in select_sources("global", [])}
+    assert {"arc", "welcometothejungle"} <= glob
+    # Browser sources are opt-out, so an explicit narrow list excludes them.
+    assert "arc" not in {s.name for s in select_sources("global", ["ycombinator"])}
 
 
 def test_explicit_preferences_narrow_browser_sources():
@@ -90,6 +117,43 @@ def test_empty_defaults_to_india():
     assert infer_region([]) == "india"
     assert infer_region(None) == "india"
     assert infer_region(["", None]) == "india"
+
+
+# ══════════════════════════════════════════════════════════════
+#  EXPLICIT REGION PREFERENCE
+# ══════════════════════════════════════════════════════════════
+
+def test_explicit_region_overrides_inference():
+    """The whole point: an India-based user targeting roles abroad."""
+    user = {"preferred_locations": ["Bangalore"], "discovery_region": "global"}
+    assert resolve_region(user) == "global"
+    assert infer_region(user["preferred_locations"]) == "india"  # inference alone would pin them
+
+
+def test_explicit_india_is_honoured():
+    assert resolve_region(
+        {"preferred_locations": ["London"], "discovery_region": "india"}
+    ) == "india"
+
+
+def test_missing_or_invalid_preference_falls_back_to_inference():
+    # India locations, so a fallback to inference is distinguishable from the
+    # "global" a valid preference would have produced.
+    for value in (None, "", "  ", "mars", "worldwide"):
+        user = {"preferred_locations": ["Pune"], "discovery_region": value}
+        assert resolve_region(user) == "india", f"{value!r} should fall back to inference"
+
+    # Pre-migration row: the column simply isn't there.
+    assert resolve_region({"preferred_locations": ["Pune"]}) == "india"
+    assert resolve_region({"preferred_locations": ["London"]}) == "global"
+    assert resolve_region({}) == "india"
+    assert resolve_region(None) == "india"
+
+
+def test_preference_is_case_and_whitespace_tolerant():
+    assert resolve_region(
+        {"preferred_locations": ["Pune"], "discovery_region": " Global "}
+    ) == "global"
 
 
 # ══════════════════════════════════════════════════════════════

@@ -36,6 +36,12 @@ class Platform(str, Enum):
     careerjet = "careerjet"
     jobicy = "jobicy"
     himalayas = "himalayas"
+    # Global-first sources (phase: global expansion)
+    arc = "arc"
+    welcometothejungle = "welcometothejungle"
+    peerlist = "peerlist"
+    flexjobs = "flexjobs"
+    google_jobs = "google_jobs"
     company_portal = "company_portal"
     other = "other"
 
@@ -132,7 +138,10 @@ class JobSearchFilters(BaseModel):
 
 class DiscoveryRequest(BaseModel):
     platforms: List[Platform] = [Platform.linkedin, Platform.naukri, Platform.indeed]
-    region: str = "india"  # "india" | "global"
+    # None = "use my saved preference" (resolved per-user at the endpoint via
+    # workers.job_discovery.resolve_region). An explicit value still wins, so a
+    # one-off global run doesn't have to change the stored setting.
+    region: Optional[str] = None  # "india" | "global" | None
     custom_keywords: Optional[List[str]] = None
     location_override: Optional[str] = None
     max_jobs: int = 50
@@ -140,4 +149,6 @@ class DiscoveryRequest(BaseModel):
     @validator("region")
     @classmethod
     def _valid_region(cls, v):
+        if v is None:
+            return None
         return v if v in ("india", "global") else "india"

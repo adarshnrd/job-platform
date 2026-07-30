@@ -2,7 +2,7 @@
 
 > **AI-Powered Autonomous Job Discovery & Application Platform**
 >
-> Discovers jobs across 19+ sources, scores them against your profile with dual-LLM evaluation, auto-applies when ≥80% match (or prepares an assisted application you confirm), generates tailored cover letters, detects and answers application questions, and preps you for interviews.
+> Discovers jobs across 30+ India and global sources, scores them against your profile with dual-LLM evaluation, auto-applies when ≥80% match (or prepares an assisted application you confirm), generates tailored cover letters, detects and answers application questions, and preps you for interviews.
 
 ---
 
@@ -62,7 +62,11 @@ cp .env.example .env     # then fill in the values (see "Environment Variables")
    database/05_recency_relevance.sql ← posted_at + recency view columns
    database/06_listing_validation.sql← stale-listing expiry + view columns
    database/07_discovery_prefs.sql   ← per-user discovery toggle
+   database/15_global_sources.sql    ← global sources + users.discovery_region
    ```
+   > Migrations 08–14 are listed in `database/` and follow the same ordering.
+   > Run `15_global_sources.sql` on its own — it uses `ALTER TYPE ... ADD VALUE`,
+   > which cannot share a transaction with statements that use the new values.
 3. Enable **Google OAuth** under Authentication → Providers → Google.
 4. Set redirect URL: `http://localhost:3000/auth/callback`.
 5. Copy these into `.env`:
@@ -182,7 +186,8 @@ DEBUG=true
 ### Job Discovery (every 4 hours, or on demand)
 ```
 APScheduler → discovery for each opted-in user
-  → region-aware source registry (19 sources; keyed API sources auto-skip)
+  → region: users.discovery_region if set, else inferred from preferred_locations
+  → region-aware source registry (32 sources; keyed API sources auto-skip)
   → batch-parse JDs across Groq + NVIDIA
   → upsert job_listings (dedup on source_url)
   → dual-LLM scoring, double-eval above 70
@@ -307,9 +312,41 @@ Redis or separate worker/beat services are required.
 3. **Single backend replica** — APScheduler is in-process (see Deployment Notes).
 4. **PDF parsing** — complex multi-column resumes parse less accurately than
    ATS-friendly layouts.
+5. **Boards that block discovery** — a few sources stay registered for display
+   and assisted apply but cannot be searched. Each scraper's module docstring
+   records what was measured and when.
+
+   | Board | Status |
+   |-------|--------|
+   | Wellfound | 403 to plain HTTP, headless Chromium, headless *and* headed real Chrome. No scraping path; kept for display + assisted apply. |
+   | Peerlist | Listing pages need a **headed** browser; detail pages stay walled, so JDs are usually unavailable. Off by default. |
+   | FlexJobs | Paywalled. Only the free `/publicjobs` tier is read, and those links often resolve to removed postings (410). Off by default. |
+   | Google Jobs | No direct scraping (consent/bot wall, hashed markup, ToS). Sourced via the licensed JSearch API — set `JSEARCH_RAPIDAPI_KEY`. |
+
+   Peerlist and FlexJobs need a visible browser window, so they only work on a
+   local/desktop deployment with `SCRAPER_ALLOW_HEADED=true`. Both drop any
+   listing whose JD never loaded rather than spending LLM budget scoring a
+   bare title.
+
+### Targeting jobs outside India
+
+Region selection drives which sources run. By default it is inferred from
+`preferred_locations`, which cannot express intent — someone living in
+Bengaluru who wants roles abroad still infers as `india`. Set
+`users.discovery_region` to `global` (migration 15) to override it; the manual
+`POST /api/v1/jobs/discover` still accepts a one-off `region` that wins for
+that run. A global run reaches Arc, Welcome to the Jungle, Y Combinator,
+Foundit's Singapore/Indonesia/Hong Kong boards, the remote boards, and the
+overseas roles on ATS company boards.
 
 ---
 
 ## License
 
 MIT — use freely, build on top, contribute back.
+
+BACKEND
+cd /Users/mindpath/Downloads/x12/job-platform/apps/api && ./venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+FRONTEND
+cd /Users/mindpath/Downloads/x12/job-platform/apps/web && npm run dev

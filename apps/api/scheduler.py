@@ -32,23 +32,23 @@ def _run_discovery_all_users():
     still browsing/discovering manually.
     """
     from database import get_supabase_admin
-    from workers.job_discovery import infer_region, run_discovery_for_user
+    from workers.job_discovery import resolve_region, run_discovery_for_user
 
     try:
         db = get_supabase_admin()
         try:
             users = db.table("users").select(
-                "id, preferred_locations, auto_discovery_enabled"
+                "id, preferred_locations, auto_discovery_enabled, discovery_region"
             ).execute()
         except Exception:
-            # Pre-migration fallback: column may not exist yet.
+            # Pre-migration fallback: columns may not exist yet.
             users = db.table("users").select("id, preferred_locations").execute()
 
         for user in (users.data or []):
             if user.get("auto_discovery_enabled") is False:
                 continue
             user_id = user["id"]
-            region = infer_region(user.get("preferred_locations"))
+            region = resolve_region(user)
             try:
                 run_discovery_for_user(user_id, region, trigger="scheduled")
             except Exception as e:

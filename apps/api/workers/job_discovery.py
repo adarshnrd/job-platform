@@ -42,6 +42,11 @@ from scrapers.careerjet import CareerjetScraper
 from scrapers.jobicy import JobicyScraper
 from scrapers.himalayas import HimalayasScraper
 from scrapers.ats import ATSAggregatorScraper
+# Global-first sources (phase: global expansion)
+from scrapers.arc import ArcScraper
+from scrapers.welcometothejungle import WelcomeToTheJungleScraper
+from scrapers.peerlist import PeerlistScraper
+from scrapers.flexjobs import FlexJobsScraper
 from config import settings
 from services import discovery_progress as progress
 from services.dedup import job_fingerprint
@@ -88,21 +93,41 @@ SOURCE_REGISTRY: dict[str, Source] = {
     "shine":          Source("shine", ShineScraper, False, False, {"india"}),
     "freshersworld":  Source("freshersworld", FreshersworldScraper, False, False, {"india"}, discoverable=False),
     "cutshort":       Source("cutshort", CutshortScraper, False, False, {"india"}, discoverable=False),
-    "foundit":        Source("foundit", FounditScraper, False, False, {"india"}, discoverable=False),
+    # Wellfound's bot wall rejects headless *and* headed browsers alike, so the
+    # scraper is a documented no-op; kept registered for display/assisted apply.
     "wellfound":      Source("wellfound", WellfoundScraper, False, False, {"india", "global"}, discoverable=False),
     "ycombinator":    Source("ycombinator", YCombinatorScraper, False, False, {"global"}),
+    # Headed-browser sources: they load only in a visible window, and their
+    # detail pages still withhold JD text, so both are opt-in rather than part
+    # of a default run (see each scraper's module docstring).
+    "peerlist":       Source("peerlist", PeerlistScraper, False, False, {"global", "india"}, discoverable=False),
+    "flexjobs":       Source("flexjobs", FlexJobsScraper, False, False, {"global"}, discoverable=False),
+    # Renders client-side but with stable data-testid hooks; carries pay bands,
+    # seniority and skills inline, and serves country-scoped boards.
+    "arc":            Source("arc", ArcScraper, False, False, {"global"}),
+    # Hybrid: browser clears the WAF, then HTTP for sitemaps + JSON-LD details.
+    "welcometothejungle": Source(
+        "welcometothejungle", WelcomeToTheJungleScraper, False, False, {"global"}
+    ),
     "glassdoor":      Source("glassdoor", GlassdoorScraper, False, False, {"global"}),
     "dice":           Source("dice", DiceScraper, False, False, {"global"}),
     "ziprecruiter":   Source("ziprecruiter", ZipRecruiterScraper, False, False, {"global"}),
-    "weworkremotely": Source("weworkremotely", WeWorkRemotelyScraper, False, False, {"global"}),
     # ── API-first keyless sources ──
+    # Foundit runs off the site's own /middleware/jobsearch JSON API (the HTML
+    # search is Akamai-walled). One deployment per country shares that API, so
+    # it serves both regions.
+    "foundit":        Source("foundit", FounditScraper, True, False, {"india", "global"}),
     "remoteok":       Source("remoteok", RemoteOKScraper, True, False, {"global", "india"}),
+    # RSS-based — no browser, despite the board itself being Cloudflare-fronted.
+    "weworkremotely": Source("weworkremotely", WeWorkRemotelyScraper, True, False, {"global"}),
     "remotive":       Source("remotive", RemotiveScraper, True, False, {"global", "india"}),
     "timesjobs":      Source("timesjobs", TimesJobsScraper, True, False, {"india"}),
     "hirist":         Source("hirist", HiristScraper, True, False, {"india"}),
     "iimjobs":        Source("iimjobs", IimjobsScraper, True, False, {"india"}),
-    # ATS-direct: many company career boards (Greenhouse/Lever/Ashby) in one source.
-    "ats":            Source("ats", ATSAggregatorScraper, True, False, {"india"}),
+    # ATS-direct: many company career boards (Greenhouse/Lever/Ashby) in one
+    # source. Region-aware: india runs keep only India roles, global runs keep
+    # the overseas postings those same boards carry.
+    "ats":            Source("ats", ATSAggregatorScraper, True, False, {"india", "global"}),
     "arbeitnow":      Source("arbeitnow", ArbeitnowScraper, True, False, {"global"}),
     "themuse":        Source("themuse", TheMuseScraper, True, False, {"india", "global"}),
     "jobicy":         Source("jobicy", JobicyScraper, True, False, {"global", "india"}),
@@ -157,7 +182,10 @@ INDIA_LOCATION_HINTS = (
 
 def infer_region(preferred_locations: list[str] | None) -> str:
     """Region for a user's locations. City names imply india; empty defaults
-    to india (this is an India-first deployment)."""
+    to india (this is an India-first deployment).
+
+    Inference only — `resolve_region` applies the user's explicit choice first.
+    """
     locations = [loc for loc in (preferred_locations or []) if loc]
     if not locations:
         return "india"
@@ -166,6 +194,23 @@ def infer_region(preferred_locations: list[str] | None) -> str:
         if any(hint in low for hint in INDIA_LOCATION_HINTS):
             return "india"
     return "global"
+
+
+def resolve_region(user: dict | None) -> str:
+    """The region a discovery run should use for `user`.
+
+    An explicit `discovery_region` on the profile wins. It exists because
+    inference cannot express intent: someone living in Bengaluru who wants to
+    relocate to Berlin has India cities in `preferred_locations`, so
+    `infer_region` would pin them to India forever and never reach the
+    global-only sources. Anything other than a recognised value falls back to
+    inference, so an unset or stale column behaves exactly as before.
+    """
+    user = user or {}
+    choice = str(user.get("discovery_region") or "").strip().lower()
+    if choice in ("india", "global"):
+        return choice
+    return infer_region(user.get("preferred_locations"))
 
 
 def build_search_pairs(
