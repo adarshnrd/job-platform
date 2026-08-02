@@ -65,6 +65,50 @@ def _summary(run: dict) -> dict:
     return {k: v for k, v in run.items() if k not in ("events", "_seq")}
 
 
+def _upsert_history_locked(run: dict):
+    """Record the run's current state on disk, replacing any earlier snapshot.
+
+    Called on every phase transition, not only at the end: a run killed mid-flight
+    used to vanish from history entirely, leaving no trace of the hours it spent
+    scraping. The jobs it scraped are safe in the database either way — this is
+    so the *run* is accounted for too.
+    """
+    _load_history_locked()
+    summary = _summary(run)
+    for i, entry in enumerate(_history):
+        if entry.get("run_id") == run["run_id"]:
+            _history[i] = summary
+            break
+    else:
+        _history.insert(0, summary)
+    del _history[MAX_HISTORY:]
+    _persist_history_locked()
+
+
+def recover_interrupted_runs() -> int:
+    """Mark runs that were still 'running' when the process died as interrupted.
+
+    Called at startup. Their scraped jobs are already persisted and their queue
+    items are picked up by the pipeline drain, so this only corrects the record.
+    """
+    with _lock:
+        _load_history_locked()
+        n = 0
+        for entry in _history:
+            if entry.get("status") == "running":
+                # Capture where it stopped before `phase` becomes the status.
+                entry["failed_phase"] = entry.get("failed_phase") or entry.get("phase")
+                entry["status"] = "interrupted"
+                entry["phase"] = "interrupted"
+                entry["error"] = "Interrupted by a server restart — saved jobs are being processed in the background"
+                entry["finished_at"] = _now()
+                n += 1
+        if n:
+            _persist_history_locked()
+            logger.info(f"Marked {n} interrupted discovery run(s) from a previous process")
+        return n
+
+
 def _emit_locked(run: dict, message: str, level: str = "info"):
     run["_seq"] += 1
     run["events"].append({"seq": run["_seq"], "ts": _now(), "level": level, "message": message})
@@ -81,12 +125,15 @@ def start_run(user_id: str, region: str, trigger: str = "manual") -> str:
         "trigger": trigger,
         "status": "running",
         "phase": "initializing",
+        "failed_phase": None,   # the phase a failed/interrupted run died in
         "started_at": _now(),
         "finished_at": None,
         "current_source": None,
         "current_query": None,
         "sources": {},
-        "counts": {"scraped": 0, "evaluated": 0, "matched": 0, "queued": 0},
+        # `saved` tracks match records actually written — it can trail `evaluated`
+        # when individual saves fail, which is what makes a partial run legible.
+        "counts": {"scraped": 0, "evaluated": 0, "matched": 0, "queued": 0, "saved": 0},
         "error": None,
         "events": [],
         "_seq": 0,
@@ -123,6 +170,8 @@ def set_phase(run_id: str, phase: str, message: str | None = None):
             run["current_source"] = None
             run["current_query"] = None
         _emit_locked(run, message or f"Phase: {phase}")
+        # Checkpoint the run record so a crash leaves evidence of how far it got.
+        _upsert_history_locked(run)
 
 
 def register_sources(run_id: str, names: list[str]):
@@ -202,6 +251,11 @@ def finish_run(run_id: str, status: str = "completed", error: str | None = None)
         if not run or run["status"] != "running":
             return
         run["status"] = status
+        # Remember where it actually stopped before `phase` is overwritten with
+        # the status — otherwise the UI stepper can only guess, and defaults to
+        # blaming the first step for a failure that happened at the last one.
+        if status != "completed":
+            run["failed_phase"] = run["phase"]
         run["phase"] = status
         run["finished_at"] = _now()
         run["current_source"] = None
@@ -219,10 +273,7 @@ def finish_run(run_id: str, status: str = "completed", error: str | None = None)
             )
         for src in run["sources"].values():
             src.pop("_t0", None)  # crashed mid-source — drop the timing marker
-        _load_history_locked()
-        _history.insert(0, _summary(run))
-        del _history[MAX_HISTORY:]
-        _persist_history_locked()
+        _upsert_history_locked(run)
         telemetry.record_discovery_run(_summary(run))  # swallows its own errors
 
 

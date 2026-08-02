@@ -220,6 +220,19 @@ def get_portal(name: str) -> PortalCapabilities | None:
     return PORTALS.get(resolve_portal_key(name))
 
 
+def auto_appliable(platform: str) -> bool:
+    """True only for Tier-A portals we can submit end to end.
+
+    Unknown platforms default to True so a portal missing from the registry still
+    behaves as before (auto-queue) rather than silently never applying.
+    """
+    try:
+        cap = get_portal(platform)
+        return cap.auto_apply if cap else True
+    except Exception:
+        return True
+
+
 def normalize_job_url(url: str) -> str:
     """Canonicalize a job URL for dedup.
 

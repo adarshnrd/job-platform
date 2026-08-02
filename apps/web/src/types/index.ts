@@ -306,7 +306,7 @@ export interface InterviewPrep {
 // ── Discovery activity (Search Activity page) ──
 export type DiscoveryPhase =
   | "initializing" | "searching" | "analyzing" | "scoring" | "saving"
-  | "completed" | "failed";
+  | "completed" | "failed" | "interrupted";
 
 export interface DiscoverySourceState {
   status: "pending" | "searching" | "done" | "error";
@@ -321,15 +321,35 @@ export interface DiscoveryRun {
   user_id: string;
   region: string;
   trigger: "manual" | "scheduled";
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "interrupted";
   phase: DiscoveryPhase;
+  /** The phase a failed/interrupted run actually stopped in — `phase` mirrors status once finished. */
+  failed_phase?: DiscoveryPhase | null;
   started_at: string;
   finished_at: string | null;
   current_source: string | null;
   current_query: string | null;
   sources: Record<string, DiscoverySourceState>;
-  counts: { scraped: number; evaluated: number; matched: number; queued: number };
+  counts: { scraped: number; evaluated: number; matched: number; queued: number; saved?: number };
   error: string | null;
+}
+
+/** Post-scrape processing queue. Everything counted here is already saved to the
+ *  database — the stages only add AI analysis on top. */
+export interface DiscoveryQueue {
+  available: boolean;
+  stages: Record<string, { pending: number; processing: number; failed: number }>;
+  totals: { pending: number; processing: number; failed: number; done: number; prefiltered: number };
+  failed: Array<{
+    id: string;
+    stage: string;
+    attempts: number;
+    last_error: string | null;
+    source_platform: string | null;
+    job_title: string | null;
+    job_company: string | null;
+    updated_at: string;
+  }>;
 }
 
 export interface DiscoveryEvent {

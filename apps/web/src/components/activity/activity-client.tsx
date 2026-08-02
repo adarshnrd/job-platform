@@ -3,13 +3,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { DiscoveryEvent, DiscoveryRun, RecentDiscoveryJob } from "@/types";
 import {
-  Activity, Bot, CheckCircle2, Clock, Globe, HeartPulse, Loader2,
+  Activity, AlertTriangle, Bot, CheckCircle2, Clock, Globe, HeartPulse, Loader2,
   MapPin, Search, Terminal, XCircle, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { AiUsagePanel } from "./ai-usage";
 import { duration, timeAgo } from "./format";
+import { ProcessingQueuePanel } from "./processing-queue";
 import { RunLedger } from "./run-ledger";
 import { SourceHealthPanel } from "./source-health";
 import { CoverageSummaryPanel } from "./coverage-summary";
@@ -125,7 +126,11 @@ export function ActivityClient() {
     }
   };
 
-  const stepIndex = run ? STEPS.findIndex((s) => s.key === run.phase) : -1;
+  // `phase` mirrors the status once a run ends, so a failed run reports "failed"
+  // rather than the step it died in — `failed_phase` carries the truth.
+  const activePhase = run ? (run.failed_phase || run.phase) : null;
+  const stepIndex = activePhase ? STEPS.findIndex((s) => s.key === activePhase) : -1;
+  const stopped = run?.status === "failed" || run?.status === "interrupted";
   const sources = run ? Object.entries(run.sources) : [];
   const sourcesDone = sources.filter(([, s]) => s.status === "done" || s.status === "error").length;
 
@@ -219,6 +224,12 @@ export function ActivityClient() {
               ) : run.status === "failed" ? (
                 <span className="flex items-center gap-1.5 text-red-400 text-sm font-semibold">
                   <XCircle size={15} /> Last run failed
+                  {run.failed_phase && <span className="font-normal text-red-400/70">during {run.failed_phase}</span>}
+                </span>
+              ) : run.status === "interrupted" ? (
+                <span className="flex items-center gap-1.5 text-amber-400 text-sm font-semibold">
+                  <AlertTriangle size={15} /> Last run interrupted
+                  {run.failed_phase && <span className="font-normal text-amber-400/70">during {run.failed_phase}</span>}
                 </span>
               ) : (
                 <span className="flex items-center gap-1.5 text-emerald-400 text-sm font-semibold">
@@ -239,7 +250,7 @@ export function ActivityClient() {
             {STEPS.map((step, i) => {
               const done = run.status === "completed" || (stepIndex >= 0 && i < stepIndex);
               const current = run.status === "running" && i === stepIndex;
-              const failedHere = run.status === "failed" && i === Math.max(stepIndex, 0);
+              const failedHere = stopped && stepIndex >= 0 && i === stepIndex;
               return (
                 <div key={step.key} className="flex items-center flex-1 last:flex-none">
                   <div className="flex flex-col items-center gap-1.5">
@@ -281,9 +292,20 @@ export function ActivityClient() {
               )}
             </div>
           )}
-          {run.status === "failed" && run.error && (
-            <div className="text-sm text-red-400 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
+          {stopped && run.error && (
+            <div className={cn(
+              "text-sm rounded-lg px-3 py-2 border",
+              run.status === "interrupted"
+                ? "text-amber-400 bg-amber-500/5 border-amber-500/20"
+                : "text-red-400 bg-red-500/5 border-red-500/20"
+            )}>
               {run.error}
+              {run.counts.scraped > 0 && (
+                <div className="text-zinc-400 mt-1 text-xs">
+                  The {run.counts.scraped} job{run.counts.scraped === 1 ? "" : "s"} found before this
+                  are saved — processing continues in the background.
+                </div>
+              )}
             </div>
           )}
 
@@ -351,6 +373,9 @@ export function ActivityClient() {
           </div>
         </div>
       )}
+
+      {/* Post-scrape processing queue — only rendered when there is work or failures */}
+      {tab === "live" && <ProcessingQueuePanel />}
 
       {/* Recently discovered jobs */}
       {tab === "live" && (

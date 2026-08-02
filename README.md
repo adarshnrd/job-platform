@@ -63,10 +63,15 @@ cp .env.example .env     # then fill in the values (see "Environment Variables")
    database/06_listing_validation.sql← stale-listing expiry + view columns
    database/07_discovery_prefs.sql   ← per-user discovery toggle
    database/15_global_sources.sql    ← global sources + users.discovery_region
+   database/16_pipeline_durability.sql ← crash-safe discovery pipeline
    ```
    > Migrations 08–14 are listed in `database/` and follow the same ordering.
    > Run `15_global_sources.sql` on its own — it uses `ALTER TYPE ... ADD VALUE`,
    > which cannot share a transaction with statements that use the new values.
+   > `16_pipeline_durability.sql` makes discovery resumable: scraped jobs are
+   > saved immediately and the AI stages retry independently. Skipping it is
+   > safe — discovery falls back to the older in-memory flow — but a failure in
+   > any AI stage then discards the whole scrape.
 3. Enable **Google OAuth** under Authentication → Providers → Google.
 4. Set redirect URL: `http://localhost:3000/auth/callback`.
 5. Copy these into `.env`:

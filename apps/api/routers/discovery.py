@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 from auth import get_user_id
+from config import settings
 from database import get_db
 from fastapi import APIRouter, Depends
 from loguru import logger
@@ -56,6 +57,56 @@ async def list_runs(user_id: str = Depends(get_user_id)):
 async def get_events(run_id: str, after: int = 0, user_id: str = Depends(get_user_id)):
     """Incremental event log for a run — pass the last seen seq as `after`."""
     return progress.get_events(run_id, after)
+
+
+@router.get("/queue")
+async def get_queue(user_id: str = Depends(get_user_id)):
+    """Post-scrape processing queue: what is still being worked on, and what failed.
+
+    Scraped jobs are saved before any AI runs, so anything listed here is data
+    that already survived — these counts show how far along it is, not what is
+    at risk.
+    """
+    from services import job_pipeline as pipeline
+
+    if not pipeline.pipeline_available():
+        return {"available": False, "stages": {}, "totals": {}, "failed": []}
+
+    stages = pipeline.pending_counts(user_id)
+    totals = {"pending": 0, "processing": 0, "failed": 0, "done": 0, "prefiltered": 0}
+    for stage, counts in stages.items():
+        if stage == pipeline.STAGE_DONE:
+            totals["done"] += sum(counts.values())
+            continue
+        if stage == pipeline.STAGE_PREFILTERED:
+            totals["prefiltered"] += sum(counts.values())
+            continue
+        for status, n in counts.items():
+            totals[status] = totals.get(status, 0) + n
+
+    return {
+        "available": True,
+        "stages": stages,
+        "totals": totals,
+        "failed": pipeline.failed_items(user_id),
+    }
+
+
+@router.post("/queue/retry")
+async def retry_queue(stage: str | None = None, user_id: str = Depends(get_user_id)):
+    """Send failed items back through their stage. The listings never left."""
+    from services import job_pipeline as pipeline
+
+    requeued = pipeline.requeue_failed(user_id, stage)
+    return {
+        "success": True,
+        "requeued": requeued,
+        "message": (
+            f"{requeued} job(s) queued for another attempt — processing resumes within "
+            f"{settings.PIPELINE_DRAIN_INTERVAL_MINUTES} minutes."
+            if requeued else "Nothing to retry."
+        ),
+    }
 
 
 @router.get("/recent")

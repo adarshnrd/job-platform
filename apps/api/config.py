@@ -88,6 +88,19 @@ class Settings(BaseSettings):
     # Health-driven scheduling: back off hard-broken sources (consecutive errors),
     # probing for recovery every Nth run. Uses telemetry source-health.
     DISCOVERY_HEALTH_SCHEDULING_ENABLED: bool = True
+
+    # ── Durable discovery pipeline (database/16_pipeline_durability.sql) ──
+    # Scraped jobs are persisted the moment a scraper returns them; the AI
+    # stages (parse → enrich → score) then run off a database-backed queue and
+    # retry independently, so no downstream failure can discard scrape work.
+    # Setting this false (or not running migration 16) reverts to the legacy
+    # in-memory pipeline. See docs/PIPELINE_DURABILITY_DESIGN.md.
+    PIPELINE_DURABLE_ENABLED: bool = True
+    PIPELINE_BATCH_SIZE: int = 25              # items claimed per stage batch
+    PIPELINE_MAX_ATTEMPTS: int = 3             # then the item is marked failed
+    PIPELINE_CLAIM_TIMEOUT_MINUTES: int = 15   # stale lease → back to pending
+    PIPELINE_DRAIN_INTERVAL_MINUTES: int = 5   # scheduled drain cadence
+    PIPELINE_PERSIST_PREFILTERED: bool = True  # keep off-profile jobs recorded
     SOURCE_ERROR_BACKOFF_PROBE_EVERY: int = 4
     LISTING_REVALIDATION_HOURS: int = 12
     STUCK_RECOVERY_INTERVAL_MINUTES: int = 20

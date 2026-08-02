@@ -49,17 +49,11 @@ from scrapers.peerlist import PeerlistScraper
 from scrapers.flexjobs import FlexJobsScraper
 from config import settings
 from services import discovery_progress as progress
+from services import job_pipeline as pipeline
 from services.dedup import job_fingerprint
 from services.experience import merge_experience
 
 db = get_db()
-
-# HR-contact columns (migration 12) — stripped from the payload if the live DB
-# hasn't run 12_hr_contact.sql yet. Keep in sync with models.job.JobListingCreate.
-_HR_CONTACT_COLUMNS = (
-    "hr_name", "hr_email", "hr_linkedin_url",
-    "hr_linkedin_search_url", "hr_contact_source", "hr_contact_confidence",
-)
 
 
 class Source:
@@ -239,17 +233,9 @@ def _has_key(cls) -> bool:
 
 
 def _portal_auto_appliable(platform: str) -> bool:
-    """True only for Tier-A portals we can submit end to end.
-
-    Unknown platforms default to True so a portal missing from the registry still
-    behaves as before (auto-queue) rather than silently never applying.
-    """
-    try:
-        from services.portals import get_portal
-        cap = get_portal(platform)
-        return cap.auto_apply if cap else True
-    except Exception:
-        return True
+    """Deprecated shim — use services.portals.auto_appliable."""
+    from services.portals import auto_appliable
+    return auto_appliable(platform)
 
 
 async def _call_search(scraper, *, query, location, max_results, credentials, region):
@@ -325,11 +311,17 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
     existing_fps: set[str] = set()
     try:
         existing_res = db.table("job_applications").select("job_listing_id").eq("user_id", user_id).execute()
-        if existing_res.data:
-            app_job_ids = [r["job_listing_id"] for r in existing_res.data]
+        seen_ids = [r["job_listing_id"] for r in (existing_res.data or [])]
+        # Jobs already staged by an earlier run count as seen too. Without this,
+        # a run interrupted before scoring would re-scrape everything it had
+        # already saved — the listings exist, but no application row points to them.
+        seen_ids += pipeline.staged_listing_ids(user_id)
+        if seen_ids:
             # Batched IN — the id set grows unbounded with a user's history and a
             # single .in_() would eventually exceed PostgREST's URL length limit.
-            seen_rows = select_in_batches(db, "job_listings", "source_url, title, company", "id", app_job_ids)
+            seen_rows = select_in_batches(
+                db, "job_listings", "source_url, title, company", "id", list(dict.fromkeys(seen_ids))
+            )
             existing_urls = {r["source_url"] for r in seen_rows}
             # Content fingerprints catch reposts of the same role under a fresh
             # URL — the unique source_url alone can't.
@@ -337,7 +329,7 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
     except Exception as e:
         logger.warning(f"Existing-URL dedup lookup skipped: {e}")
 
-    # ── Phase 1: Scrape selected sources for the region and collect raw jobs ──
+    # ── Phase 1: Scrape selected sources, persisting each batch as it arrives ──
     sources = select_sources(region, preferred_platforms)
 
     # Health-driven scheduling: back off hard-broken sources (with periodic
@@ -367,7 +359,12 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
         f"Searching {len(sources)} sources with queries {queries} "
         f"across {', '.join(locations)}",
     )
+    # Jobs are written to the database as each query returns (see _checkpoint).
+    # `raw_jobs` / `job_ids` only carry the already-persisted batch forward to
+    # the AI stages — losing them costs re-processing, never re-scraping.
     raw_jobs = []
+    job_ids: list[str] = []
+    prefiltered_total = 0
 
     for src in sources:
         # Discovery runs unauthenticated. The legacy platform_credentials table
@@ -391,7 +388,7 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
                             credentials=credentials,
                             region=region,
                         )
-                        new_count = 0
+                        fresh = []
                         for job in jobs:
                             fp = job_fingerprint(job.title, job.company)
                             if (
@@ -399,11 +396,21 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
                                 and fp not in existing_fps
                                 and job.company.lower() not in blacklisted
                             ):
-                                raw_jobs.append(job)
+                                fresh.append(job)
                                 existing_urls.add(job.source_url)
                                 existing_fps.add(fp)
-                                new_count += 1
-                        progress.query_result(run_id, src.name, query, len(jobs), new_count)
+                        progress.query_result(run_id, src.name, query, len(jobs), len(fresh))
+
+                        # ── DURABILITY CHECKPOINT ──
+                        # Persist before moving on. From here the scrape output
+                        # survives any later failure, crash or restart.
+                        if fresh:
+                            kept, kept_ids, dropped = await _checkpoint(
+                                fresh, user=user, user_id=user_id, run_id=run_id
+                            )
+                            raw_jobs.extend(kept)
+                            job_ids.extend(kept_ids)
+                            prefiltered_total += dropped
                     except Exception as e:
                         logger.error(f"Error searching {src.name} for '{query}': {e}")
                         progress.log(run_id, f"{src.name}: '{query}' failed — {e}", "error")
@@ -414,38 +421,86 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
             progress.source_finished(run_id, src.name, error=str(e))
             continue
 
+    if prefiltered_total:
+        progress.log(
+            run_id,
+            f"Prefilter: {prefiltered_total} off-profile job(s) stored but skipped for AI scoring",
+        )
+
     if not raw_jobs:
-        logger.info(f"No new jobs found for {user_id}")
-        progress.log(run_id, "No new jobs found across all sources")
+        logger.info(f"No new jobs to process for {user_id}")
+        progress.log(run_id, "No new on-profile jobs found across all sources")
         return
 
-    # ── Phase 1.5: cheap rule-based prefilter (protect the LLM budget) ──
-    # Drops obviously off-profile roles (sales/finance/etc. that big boards carry)
-    # before any LLM parse/score. Recall-first — see services/prefilter.py.
-    if settings.DISCOVERY_PREFILTER_ENABLED:
-        from services.prefilter import prefilter_jobs
-        raw_jobs, dropped = prefilter_jobs(raw_jobs, user)
-        if dropped:
-            progress.log(run_id, f"Prefilter: skipped {dropped} off-profile jobs before AI scoring")
-        if not raw_jobs:
-            logger.info(f"All scraped jobs filtered out as off-profile for {user_id}")
-            progress.log(run_id, "No on-profile jobs after prefilter")
-            return
+    logger.info(f"Scraped and stored {len(raw_jobs)} new jobs — starting parallel AI evaluation")
 
-    logger.info(f"Scraped {len(raw_jobs)} new jobs — starting parallel AI evaluation")
+    # ── Phases 2–5: AI processing ──
+    # Every scraped job is already in the database. When the durable queue is
+    # available the AI stages run off it, so a failure here costs at most the
+    # in-flight batch and the scheduled drain finishes the rest. Otherwise the
+    # legacy in-memory path runs (migration 16 not applied, or the feature is
+    # switched off) — same results, but a failure still forfeits the run.
+    if pipeline.pipeline_available():
+        progress.set_phase(
+            run_id, "analyzing", f"Processing {len(raw_jobs)} saved jobs with AI"
+        )
+        from workers import pipeline_worker
+        totals = await pipeline_worker.drain(user_id, run_id=run_id)
+        evaluated, matched, deferred = totals["scored"], totals["matched"], totals["failed"]
+    else:
+        matched, _queued = await _process_in_memory(
+            user=user, user_id=user_id, run_id=run_id, raw_jobs=raw_jobs, job_ids=job_ids,
+        )
+        evaluated, deferred = len(raw_jobs), 0
 
+    logger.info(
+        f"Discovery complete for {user_id}: {len(raw_jobs)} scraped, {evaluated} evaluated, "
+        f"{matched} matched (>={settings.RECOMMENDED_THRESHOLD}%)"
+        + (f", {deferred} deferred for retry" if deferred else "")
+    )
+    progress.set_phase(run_id, "saving", "Wrapping up")
+
+    try:
+        from services.job_tracker import update_tracker
+        update_tracker(user_id)
+    except Exception as e:
+        logger.warning(f"Job tracker update failed (non-fatal): {e}")
+
+    # Grow ATS coverage from the URLs this run collected — validated boards are
+    # persisted and picked up by the next run's ATS source. Non-fatal, bounded.
+    try:
+        from services.ats_harvester import harvest_from_db
+        added = await harvest_from_db(db, max_new=15)
+        if added:
+            progress.log(run_id, f"ATS harvester discovered {len(added)} new company board(s)")
+    except Exception as e:
+        logger.warning(f"ATS harvest failed (non-fatal): {e}")
+
+
+async def _process_in_memory(
+    *, user: dict, user_id: str, run_id: str, raw_jobs: list, job_ids: list
+) -> tuple[int, int]:
+    """Legacy AI pipeline — used when the durable queue isn't available.
+
+    Kept as the fallback for a database without migration 16 (or with
+    PIPELINE_DURABLE_ENABLED=false). Listings are already stored either way, so
+    a failure here loses evaluation work but never the scrape.
+    """
     # ── Phase 2: Batch parse all JDs concurrently across both APIs ──
     progress.set_phase(run_id, "analyzing", f"Parsing {len(raw_jobs)} job descriptions with AI")
     jd_texts = [job.jd_text for job in raw_jobs]
     parsed_jds = await batch_parse_jds(jd_texts)
 
-    # ── Phase 2.2: fill experience requirements before the listings are stored ──
+    # ── Phase 2.2: fill experience requirements on the stored listings ──
     # Precedence: scraper-set > LLM-parsed > regex over the JD (services/experience.py).
+    # The listing row already exists, so this is a write-back, not a precondition
+    # for storing it — a parse failure costs experience metadata, not the job.
     n_experience = 0
     for i, job in enumerate(raw_jobs):
         parsed = parsed_jds[i] if isinstance(parsed_jds[i], dict) else {}
         if merge_experience(job, parsed):
             n_experience += 1
+            pipeline.update_listing(job_ids[i], pipeline.experience_fields(job))
     if n_experience:
         progress.log(run_id, f"Experience: extracted requirements for {n_experience} listing(s)")
 
@@ -457,20 +512,17 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
         try:
             from services.hr_contact import enrich_jobs
             n_enriched = await enrich_jobs(raw_jobs)
+            for i, job in enumerate(raw_jobs):
+                fields = pipeline.hr_contact_fields(job)
+                if any(fields.values()):
+                    pipeline.update_listing(job_ids[i], fields)
             if n_enriched:
                 progress.log(run_id, f"HR contact: added contact links to {n_enriched} listing(s)")
         except Exception as e:
             logger.warning(f"HR-contact enrichment failed (non-fatal): {e}")
 
-    # ── Phase 3: Store job listings in DB ──
-    progress.log(run_id, f"Storing {len(raw_jobs)} job listings")
-    job_ids = []
-    valid_indices = []
-    for i, job in enumerate(raw_jobs):
-        job_id = await _upsert_job_listing(job)
-        job_ids.append(job_id)
-        if job_id:
-            valid_indices.append(i)
+    # Listings were stored at scrape time, so every job carries an id already.
+    valid_indices = [i for i, job_id in enumerate(job_ids) if job_id]
 
     # ── Phase 4: Batch score all jobs concurrently with double-eval ──
     progress.set_phase(
@@ -485,8 +537,13 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
     scores = await batch_score_jobs(user, score_inputs, double_eval_threshold=70)
 
     # ── Phase 5: Store results and queue auto-apply ──
+    # Every write here is isolated per job. A transient DB/network fault on one
+    # listing used to abort the whole loop and discard every remaining match —
+    # losing hours of scraping to a single blip (see docs/PIPELINE_DURABILITY_DESIGN.md).
     progress.set_phase(run_id, "saving", "Saving match results and queueing auto-applies")
     queued_count = 0
+    saved_count = 0
+    save_failures = 0
     newly_matched = []
     for result_idx, orig_idx in enumerate(valid_indices):
         job_id = job_ids[orig_idx]
@@ -514,25 +571,40 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
             "status": "matched",
         }
 
-        app_res = db.table("job_applications").upsert(
-            app_data, on_conflict="user_id,job_listing_id"
-        ).execute()
+        try:
+            app_res = db.table("job_applications").upsert(
+                app_data, on_conflict="user_id,job_listing_id"
+            ).execute()
+        except Exception as e:
+            save_failures += 1
+            logger.error(f"Saving match for listing {job_id} failed: {e}")
+            progress.log(run_id, f"Could not save match for a listing — {e}", "error")
+            continue
+
+        saved_count += 1
+        application_id = app_res.data[0]["id"] if app_res.data else None
 
         # Only auto-queue when the *portal* supports full automation (Tier A).
         # Tier-B portals (e.g. Wellfound, Indeed) stay as matches for assisted
         # apply even at a high score — we never queue what we can't submit.
+        # Queueing is best-effort: a failure here must not discard the match
+        # record that was just written.
         job_platform = getattr(raw_jobs[orig_idx].source_platform, "value", raw_jobs[orig_idx].source_platform)
         if tier == "auto_apply" and user.get("auto_apply_enabled") and _portal_auto_appliable(job_platform):
-            if app_res.data:
-                db.table("apply_queue").insert({
-                    "application_id": app_res.data[0]["id"],
-                    "user_id": user_id,
-                    "priority": 10 - (score // 10),
-                }).execute()
-                db.table("job_applications").update(
-                    {"status": "queued"}
-                ).eq("id", app_res.data[0]["id"]).execute()
-                queued_count += 1
+            if application_id:
+                try:
+                    db.table("apply_queue").insert({
+                        "application_id": application_id,
+                        "user_id": user_id,
+                        "priority": 10 - (score // 10),
+                    }).execute()
+                    db.table("job_applications").update(
+                        {"status": "queued"}
+                    ).eq("id", application_id).execute()
+                    queued_count += 1
+                except Exception as e:
+                    logger.error(f"Auto-apply queueing failed for application {application_id}: {e}")
+                    progress.log(run_id, f"Match saved but auto-apply queueing failed — {e}", "error")
 
         if score >= settings.RECOMMENDED_THRESHOLD:
             job_dict = raw_jobs[orig_idx].dict()
@@ -540,104 +612,66 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
             job_dict["id"] = job_id
             newly_matched.append(job_dict)
 
+        # Live counts so a partial run still shows what it managed to save.
+        progress.update_counts(
+            run_id, matched=len(newly_matched), queued=queued_count, saved=saved_count,
+        )
+
+    if save_failures:
+        progress.log(
+            run_id,
+            f"{save_failures} of {len(valid_indices)} match records could not be saved "
+            f"(the job listings themselves are stored and will be retried)",
+            "error",
+        )
+
     logger.info(
         f"Discovery complete for {user_id}: "
         f"{len(raw_jobs)} scraped, {len(valid_indices)} evaluated, "
         f"{len(newly_matched)} matched (>={settings.RECOMMENDED_THRESHOLD}%)"
     )
     progress.update_counts(run_id, matched=len(newly_matched), queued=queued_count)
+    return len(newly_matched), queued_count
+
+
+async def _checkpoint(
+    jobs: list, *, user: dict, user_id: str, run_id: str
+) -> tuple[list, list[str], int]:
+    """Store a freshly scraped batch and enqueue it for AI processing.
+
+    This is the point where scrape work becomes durable — it runs after every
+    query, so a failure in any later stage costs processing time, never the
+    scrape. Returns (jobs_to_process, their_listing_ids, prefiltered_count);
+    the first two are index-aligned and exclude prefiltered jobs and any listing
+    that could not be stored.
+    """
+    prefiltered: set[int] = set()
+    if settings.DISCOVERY_PREFILTER_ENABLED:
+        from services.prefilter import rejected_indices
+        prefiltered = rejected_indices(jobs, user)
+
+    dropped = len(prefiltered)
+    if prefiltered and not settings.PIPELINE_PERSIST_PREFILTERED:
+        # Legacy behaviour: off-profile jobs are discarded before they reach the
+        # database at all. Recorded here as a deliberate opt-out.
+        jobs = [job for i, job in enumerate(jobs) if i not in prefiltered]
+        prefiltered = set()
 
     try:
-        from services.job_tracker import update_tracker
-        update_tracker(user_id)
+        listing_ids = await pipeline.persist_scraped_batch(
+            jobs, user_id=user_id, run_id=run_id, prefiltered=prefiltered,
+        )
     except Exception as e:
-        logger.warning(f"Job tracker update failed (non-fatal): {e}")
+        # persist_scraped_batch is non-fatal by contract; this guards the caller
+        # against anything it could not absorb, so scraping continues regardless.
+        logger.error(f"Checkpoint failed for a batch of {len(jobs)} job(s): {e}")
+        progress.log(run_id, f"Could not store a scraped batch — {e}", "error")
+        return [], [], dropped
 
-    # Grow ATS coverage from the URLs this run collected — validated boards are
-    # persisted and picked up by the next run's ATS source. Non-fatal, bounded.
-    try:
-        from services.ats_harvester import harvest_from_db
-        added = await harvest_from_db(db, max_new=15)
-        if added:
-            progress.log(run_id, f"ATS harvester discovered {len(added)} new company board(s)")
-    except Exception as e:
-        logger.warning(f"ATS harvest failed (non-fatal): {e}")
-
-
-def _ilike_exact(text: str) -> str:
-    """Escape LIKE wildcards so .ilike() does a case-insensitive exact match."""
-    return (text or "").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-def _find_existing_listing(job_data: dict) -> str | None:
-    """Content-level dedup: a listing with the same normalized title+company is
-    the same job, no matter what URL the portal minted for the repost."""
-    try:
-        res = db.table("job_listings").select("id")\
-            .eq("dedupe_key", job_data["dedupe_key"]).limit(1).execute()
-        return res.data[0]["id"] if res.data else None
-    except Exception:
-        # Pre-migration: dedupe_key column missing (run database/11_job_dedup.sql).
-        # Fall back to case-insensitive exact title+company — catches identical
-        # reposts, just not punctuation/suffix variants.
-        try:
-            res = db.table("job_listings").select("id")\
-                .ilike("title", _ilike_exact(job_data.get("title")))\
-                .ilike("company", _ilike_exact(job_data.get("company")))\
-                .limit(1).execute()
-            return res.data[0]["id"] if res.data else None
-        except Exception as e:
-            logger.warning(f"Dedup lookup skipped: {e}")
-            return None
-
-
-async def _upsert_job_listing(job) -> str | None:
-    from datetime import datetime
-    from services.portals import normalize_job_url
-    job_data = job.dict()
-    # Canonicalize the URL (e.g. angel.co → wellfound.com) so the same role from
-    # different hosts collapses onto one listing via the unique source_url index.
-    if job_data.get("source_url"):
-        job_data["source_url"] = normalize_job_url(job_data["source_url"])
-    job_data["dedupe_key"] = job_fingerprint(job_data.get("title"), job_data.get("company"))
-    # Same role already stored under a different URL? Reuse that listing so the
-    # application lands on it instead of creating a duplicate row.
-    existing_id = _find_existing_listing(job_data)
-    if existing_id:
-        return existing_id
-    job_data["required_skills"] = list(job_data.get("required_skills") or [])
-    job_data["nice_to_have_skills"] = list(job_data.get("nice_to_have_skills") or [])
-    # Pydantic enum → its string value for the Postgres enum column.
-    platform_value = getattr(job_data.get("source_platform"), "value", job_data.get("source_platform"))
-    job_data["source_platform"] = platform_value
-    if job_data.get("posted_at"):
-        job_data["posted_at"] = job_data["posted_at"].isoformat() if isinstance(job_data["posted_at"], datetime) else job_data["posted_at"]
-    else:
-        job_data["posted_at"] = datetime.utcnow().isoformat()
-
-    # Pre-migration safety: the live DB may lack optional columns/enum values
-    # (dedupe_key from migration 11, hr_* from migration 12, new platform enum
-    # values from 02). PostgREST reports one missing column per attempt, so strip
-    # the offending class and retry — up to a few times to clear a stacked set.
-    for _ in range(4):
-        try:
-            result = db.table("job_listings").upsert(job_data, on_conflict="source_url").execute()
-            return result.data[0]["id"] if result.data else None
-        except Exception as e:
-            err = str(e).lower()
-            if "dedupe_key" in err and "dedupe_key" in job_data:
-                logger.warning("dedupe_key column missing — run database/11_job_dedup.sql for DB-level dedup.")
-                job_data.pop("dedupe_key", None)
-            elif any(k in err for k in ("hr_email", "hr_linkedin", "hr_name", "hr_contact")) \
-                    and any(k in job_data for k in _HR_CONTACT_COLUMNS):
-                logger.warning("hr_* contact columns missing — run database/12_hr_contact.sql to store HR contacts.")
-                for k in _HR_CONTACT_COLUMNS:
-                    job_data.pop(k, None)
-            elif "invalid input value for enum" in err and job_data.get("source_platform") != "other":
-                logger.warning(f"Enum value '{platform_value}' not in DB yet — storing as 'other'. Run 02_api_sources.sql.")
-                job_data["source_platform"] = "other"
-            else:
-                logger.error(f"Job upsert failed: {e}")
-                return None
-    logger.error("Job upsert failed after stripping optional columns")
-    return None
+    kept, kept_ids = [], []
+    for i, (job, listing_id) in enumerate(zip(jobs, listing_ids)):
+        if i in prefiltered or not listing_id:
+            continue
+        kept.append(job)
+        kept_ids.append(listing_id)
+    return kept, kept_ids, dropped

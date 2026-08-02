@@ -117,3 +117,16 @@ def prefilter_jobs(jobs: list, user: dict) -> tuple[list, int]:
     if dropped:
         logger.info(f"Prefilter: dropped {dropped}/{len(jobs)} off-profile jobs before LLM scoring")
     return kept, dropped
+
+
+def rejected_indices(jobs: list, user: dict) -> set[int]:
+    """Positions of the jobs this filter rejects, without discarding anything.
+
+    The durable pipeline persists rejected jobs too (tagged `prefiltered`) so a
+    filter that was too aggressive can be replayed from the database instead of
+    costing another multi-hour scrape — hence indices rather than a filtered list.
+    """
+    keywords = build_user_keywords(user)
+    if not keywords:
+        return set()
+    return {i for i, job in enumerate(jobs) if not is_relevant(job, keywords)}

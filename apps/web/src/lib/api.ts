@@ -14,6 +14,7 @@ import type {
   PendingQuestion,
   DiscoveryRun,
   DiscoveryEvent,
+  DiscoveryQueue,
   DiscoverySource,
   RecentDiscoveryJob,
   TelemetryRun,
@@ -231,6 +232,11 @@ export const api = {
       ),
     recent: (window: string) =>
       request<{ window: string; count: number; jobs: RecentDiscoveryJob[] }>(`/discovery/recent?window=${window}`),
+    queue: () => request<DiscoveryQueue>("/discovery/queue"),
+    retryQueue: (stage?: string) =>
+      request<{ success: boolean; requeued: number; message: string }>(
+        `/discovery/queue/retry${stage ? `?stage=${stage}` : ""}`, { method: "POST" }
+      ),
   },
   // Mission-control telemetry (run ledger, scraper health, AI usage)
   telemetry: {

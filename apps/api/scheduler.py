@@ -57,6 +57,22 @@ def _run_discovery_all_users():
         logger.error(f"Scheduled discovery-all failed: {e}")
 
 
+def _drain_pipeline_queue():
+    """Finish post-scrape AI stages for jobs any run left behind.
+
+    This is what makes discovery resumable: a run killed mid-parse/score (crash,
+    restart, `--reload`) leaves its work in job_pipeline_items, and this tick
+    completes it — no re-scraping, no user action. It runs regardless of
+    DISCOVERY_SCHEDULER_ENABLED: that flag gates *starting* new scrapes, not
+    finishing work already scraped.
+    """
+    from workers.pipeline_worker import drain_all_users
+    try:
+        drain_all_users()
+    except Exception as e:
+        logger.error(f"Pipeline drain failed: {e}")
+
+
 def _process_apply_queue():
     """Drain the pending apply queue with rate-limited delays between applications.
 
@@ -224,6 +240,16 @@ def start_scheduler():
             "Automatic discovery cron DISABLED (DISCOVERY_SCHEDULER_ENABLED=false) — "
             "manual discovery from the UI still works normally."
         )
+
+    # Always armed — see _drain_pipeline_queue. Without it, jobs scraped by an
+    # interrupted run would sit staged and unscored until the next manual run.
+    scheduler.add_job(
+        _drain_pipeline_queue,
+        IntervalTrigger(minutes=settings.PIPELINE_DRAIN_INTERVAL_MINUTES),
+        id="pipeline_drain",
+        name="Drain discovery processing queue",
+        replace_existing=True,
+    )
 
     scheduler.add_job(
         _process_apply_queue,

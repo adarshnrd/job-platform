@@ -22,11 +22,26 @@ async def lifespan(app: FastAPI):
     """Startup: configure logging, validate config, start scheduler. Shutdown: stop scheduler."""
     setup_logging()
     _validate_config()
+    _recover_interrupted_discovery()
     start_scheduler()
     logger.info(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} started")
     yield
     stop_scheduler()
     logger.info("Application shut down")
+
+
+def _recover_interrupted_discovery():
+    """Close the books on runs the previous process died in the middle of.
+
+    Their scraped jobs are already in the database and their queue items are
+    picked up by the pipeline drain, so this only corrects the run record —
+    which used to disappear entirely when a run was interrupted.
+    """
+    try:
+        from services.discovery_progress import recover_interrupted_runs
+        recover_interrupted_runs()
+    except Exception as e:
+        logger.warning(f"Interrupted-run recovery skipped: {e}")
 
 
 def _validate_config():

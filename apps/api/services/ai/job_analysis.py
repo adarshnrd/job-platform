@@ -97,11 +97,16 @@ Return JSON:
 
 
 def _empty_jd_parse() -> dict:
+    # `_failed` marks a sentinel apart from a genuine result. Without it, a
+    # provider outage is indistinguishable from a real evaluation, and the
+    # durable pipeline would mark the job permanently processed instead of
+    # retrying it (see workers/pipeline_worker.py).
     return {
         "title": "Unknown", "company": "Unknown",
         "required_skills": [], "nice_to_have_skills": [],
         "responsibilities": [], "qualifications": [],
         "is_remote_friendly": False,
+        "_failed": True,
     }
 
 
@@ -111,7 +116,13 @@ def _empty_score() -> dict:
         "strengths": [], "gaps": [], "recommendations": [],
         "matched_skills": [], "missing_required_skills": [],
         "missing_nice_skills": [], "summary": "Scoring failed",
+        "_failed": True,
     }
+
+
+def failed_result(result) -> bool:
+    """True when `result` is a sentinel from a failed LLM call, not an answer."""
+    return not isinstance(result, dict) or bool(result.get("_failed"))
 
 
 def _enforce_tier(result: dict, score: int) -> dict:

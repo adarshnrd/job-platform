@@ -30,3 +30,13 @@ def test_discovery_cron_registered_when_flag_enabled(monkeypatch):
     job = scheduler_mod.scheduler.get_job("discover_jobs")
     assert job is not None
     assert job.trigger.fields[5].expressions[0].step == 6  # CronTrigger "*/6" hour field
+
+
+def test_pipeline_drain_runs_even_with_discovery_disabled(monkeypatch):
+    """The flag gates *starting* scrapes, not finishing work already scraped.
+
+    Without this, jobs saved by an interrupted run would sit unscored until
+    someone pressed Discover Jobs again — the opposite of resumable."""
+    monkeypatch.setattr(scheduler_mod.settings, "DISCOVERY_SCHEDULER_ENABLED", False)
+    scheduler_mod.start_scheduler()
+    assert scheduler_mod.scheduler.get_job("pipeline_drain") is not None

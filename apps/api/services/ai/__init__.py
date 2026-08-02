@@ -18,6 +18,7 @@ from services.ai.job_analysis import (  # noqa: F401
     compute_match_score,
     batch_parse_jds,
     batch_score_jobs,
+    failed_result,
 )
 from services.ai.content_gen import (  # noqa: F401
     generate_cover_letter,
