@@ -1,6 +1,7 @@
 """Dice.com job scraper using their public search API."""
 import httpx
 from loguru import logger
+from config import settings
 from scrapers.base import BaseScraper
 from models.job import JobListingCreate, Platform
 
@@ -23,6 +24,10 @@ class DiceScraper(BaseScraper):
         return await self._fetch_jobs(query, location, max_results)
 
     async def _fetch_jobs(self, query: str, location: str, max_results: int) -> list[JobListingCreate]:
+        if not settings.DICE_API_KEY:
+            logger.info("Dice skipped — DICE_API_KEY not set")
+            return []
+
         jobs = []
         try:
             params = {
@@ -36,7 +41,7 @@ class DiceScraper(BaseScraper):
                 "language": "en",
             }
             headers = {
-                "x-api-key": "1YAt0R9wBg4WfsF9VB2778F5CHLAPMVH3ITP",
+                "x-api-key": settings.DICE_API_KEY,
                 "User-Agent": "Mozilla/5.0 (compatible; JobSearchBot/1.0)",
             }
             async with httpx.AsyncClient(timeout=30) as client:

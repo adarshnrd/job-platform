@@ -4,7 +4,7 @@ import { ApplicationsClient } from "@/components/applications/applications-clien
 import { redirect } from "next/navigation";
 
 export default async function ApplicationsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
   return (

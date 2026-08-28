@@ -26,6 +26,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Claude Code local settings — machine-specific, may capture live secrets
+# typed into allowlisted commands. Never track this file.
+.claude/settings.local.json
+
 # Build artifacts
 *.egg-info/
 build/
@@ -33,3 +37,6 @@ build/
 # Generated at runtime
 apps/api/data/
 apps/api/source/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat

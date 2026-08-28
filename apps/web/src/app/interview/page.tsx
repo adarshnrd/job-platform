@@ -4,7 +4,7 @@ import { InterviewClient } from "@/components/interview/interview-client";
 import { redirect } from "next/navigation";
 
 export default async function InterviewPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
   return (

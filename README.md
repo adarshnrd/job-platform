@@ -93,7 +93,24 @@ Optional job-source API keys (sources auto-skip when unset): `ADZUNA_APP_ID` +
 `ADZUNA_APP_KEY`, `JOOBLE_API_KEY`, `JSEARCH_RAPIDAPI_KEY` (JSearch also powers
 Google-for-Jobs results). Optional email: `RESEND_API_KEY`.
 
-### 4 — Generate a session encryption key
+### 4 — Enable secret-scanning pre-commit hook (recommended)
+
+This repo ships a [gitleaks](https://github.com/gitleaks/gitleaks) pre-commit hook
+that blocks commits containing API keys, JWTs, or passwords. Enable it once per
+clone:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+**Never paste a live credential (API key, JWT, database password) into a shell
+command that a tool might persist** — Bash history, `.claude/settings.local.json`
+permission allowlists, terminal session logs, etc. all get written to disk and
+some of those files can end up tracked by git. Use environment variables sourced
+from the gitignored `.env` instead, even for one-off debugging.
+
+### 5 — Generate a session encryption key
 
 Job-board sessions are stored Fernet-encrypted. Generate a key:
 
@@ -104,7 +121,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 (For local dev you can leave the default and run with `DEBUG=true`, but you'll get a warning.)
 
-### 5 — Install & run
+### 6 — Install & run
 
 ```bash
 # Backend
@@ -350,8 +367,24 @@ overseas roles on ATS company boards.
 
 MIT — use freely, build on top, contribute back.
 
-BACKEND
-cd /Users/mindpath/Downloads/x12/job-platform/apps/api && ./venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+### Running Servers (Portable & Machine-Independent)
 
-FRONTEND
-cd /Users/mindpath/Downloads/x12/job-platform/apps/web && npm run dev
+**Option 1: Start both backend and frontend together (Single Command)**
+```bash
+./scripts/start.sh
+# OR
+make start
+```
+
+**Option 2: Run backend and frontend in separate terminals**
+
+- **Terminal 1 — Backend (FastAPI):**
+  ```bash
+  cd apps/api && python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+  ```
+  *(If using a virtual environment inside `apps/api/venv`: `cd apps/api && ./venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload`)*
+
+- **Terminal 2 — Frontend (Next.js):**
+  ```bash
+  cd apps/web && npm run dev
+  ```
