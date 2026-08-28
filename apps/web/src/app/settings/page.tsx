@@ -4,7 +4,7 @@ import { SettingsClient } from "@/components/settings/settings-client";
 import { redirect } from "next/navigation";
 
 export default async function SettingsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
   const { data: profile } = await supabase.from("users").select("*").eq("id", user.id).single();

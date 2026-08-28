@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 export const metadata = { title: "AI Career Copilot" };
 
 export default async function CopilotPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 

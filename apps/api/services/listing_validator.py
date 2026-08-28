@@ -16,8 +16,11 @@ wrongly hide a good one.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import re
+import socket
 from datetime import datetime, timezone
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from loguru import logger
@@ -50,6 +53,7 @@ EXPIRY_MARKERS: dict[str, list[str]] = {
 _DEAD_REDIRECT_HINTS = ("/jobs", "/search", "/home", "expired", "notfound", "not-found")
 
 _TIMEOUT = httpx.Timeout(15.0, connect=10.0)
+_MAX_REDIRECTS = 3
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -62,6 +66,38 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+async def _is_safe_external_url(url: str) -> bool:
+    """Reject local, private, and otherwise non-public destinations before fetching."""
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        return False
+
+    try:
+        addresses = {ipaddress.ip_address(parsed.hostname)}
+    except ValueError:
+        try:
+            infos = await asyncio.get_running_loop().getaddrinfo(
+                parsed.hostname,
+                parsed.port or (443 if parsed.scheme == "https" else 80),
+                type=socket.SOCK_STREAM,
+            )
+            addresses = {ipaddress.ip_address(info[4][0]) for info in infos}
+        except (OSError, ValueError):
+            return False
+
+    return bool(addresses) and all(
+        not (
+            address.is_private
+            or address.is_loopback
+            or address.is_link_local
+            or address.is_multicast
+            or address.is_reserved
+            or address.is_unspecified
+        )
+        for address in addresses
+    )
+
+
 async def validate_listing(url: str, platform: str = "", client: httpx.AsyncClient | None = None) -> tuple[bool, str]:
     """Check whether a single job listing is still live.
 
@@ -72,12 +108,29 @@ async def validate_listing(url: str, platform: str = "", client: httpx.AsyncClie
     if not url:
         return True, ""  # Nothing to check — don't touch it.
 
+    if not await _is_safe_external_url(url):
+        logger.warning(f"Listing validation skipped unsafe URL: {url[:120]}")
+        return True, ""
+
     owns_client = client is None
     if owns_client:
-        client = httpx.AsyncClient(timeout=_TIMEOUT, headers=_HEADERS, follow_redirects=True)
+        client = httpx.AsyncClient(timeout=_TIMEOUT, headers=_HEADERS, follow_redirects=False)
     try:
         try:
-            resp = await client.get(url)
+            final_url = url
+            for _ in range(_MAX_REDIRECTS + 1):
+                if not await _is_safe_external_url(final_url):
+                    logger.warning(f"Listing validation blocked unsafe redirect: {final_url[:120]}")
+                    return True, ""
+                resp = await client.get(final_url, follow_redirects=False)
+                if not resp.is_redirect:
+                    break
+                location = resp.headers.get("location")
+                if not location:
+                    break
+                final_url = urljoin(final_url, location)
+            else:
+                return True, ""  # Too many redirects are inconclusive.
         except (httpx.TimeoutException, httpx.TransportError) as e:
             logger.debug(f"Listing check inconclusive ({url[:60]}…): {e}")
             return True, ""  # Inconclusive — leave as-is.
@@ -86,7 +139,7 @@ async def validate_listing(url: str, platform: str = "", client: httpx.AsyncClie
             return False, f"HTTP {resp.status_code} — listing removed"
 
         # A redirect that lands somewhere generic usually means the detail page died.
-        final = str(resp.url).lower()
+        final = final_url.lower()
         if final != url.lower():
             orig_path = re.sub(r"https?://[^/]+", "", url.lower())
             if orig_path not in final and any(h in final for h in _DEAD_REDIRECT_HINTS):
