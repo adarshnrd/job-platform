@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from loguru import logger
 from database import get_db
 from services.ai import generate_cover_letter, answer_screening_question, NEEDS_INFO_TOKEN
+from services.resume_storage import create_signed_resume_url
 
 db = get_db()
 
@@ -53,22 +54,25 @@ def log_event(application_id: str, user_id: str, event_type: str, message: str =
         logger.warning(f"application_events insert skipped ({event_type}): {e}")
 
 
-def _update_application(app_id: str, fields: dict, legacy_only: dict):
+def _update_application(user_id: str, app_id: str, fields: dict, legacy_only: dict) -> bool:
     """
     Update job_applications with the full tracking fields; if the new columns
     don't exist yet (pre-migration), retry with only the legacy columns.
     """
     try:
-        db.table("job_applications").update(fields).eq("id", app_id).execute()
+        result = db.table("job_applications").update(fields).eq("id", app_id).eq("user_id", user_id).execute()
+        return bool(result and result.data)
     except Exception as e:
         if "could not find" in str(e).lower() or "column" in str(e).lower():
             logger.warning(f"Tracking columns missing — applying legacy update only. Run 03_application_tracking.sql. ({e})")
             try:
-                db.table("job_applications").update(legacy_only).eq("id", app_id).execute()
+                result = db.table("job_applications").update(legacy_only).eq("id", app_id).eq("user_id", user_id).execute()
+                return bool(result and result.data)
             except Exception as e2:
                 logger.error(f"Legacy application update failed: {e2}")
         else:
             logger.error(f"Application update failed: {e}")
+    return False
 
 
 def _missing_profile_fields(user: dict) -> list[dict]:
@@ -233,7 +237,7 @@ def prepare_application(user_id: str, application_id: str, overrides: dict | Non
     resume_snapshot = {
         "resume_id": resume.get("id"),
         "name": resume.get("name"),
-        "file_url": resume.get("file_url"),
+        "file_url": create_signed_resume_url(resume.get("file_url")),
         "version": resume.get("version", 1),
     }
     job_snapshot = {
@@ -261,7 +265,7 @@ def prepare_application(user_id: str, application_id: str, overrides: dict | Non
         "prepared_at": _now(),
     }
     legacy = {"resume_id": resume.get("id"), "cover_letter": cover_letter}
-    _update_application(application_id, full_fields, legacy)
+    _update_application(user_id, application_id, full_fields, legacy)
     log_event(application_id, user_id, "prepared", "Application package ready to submit")
 
     return {
@@ -318,9 +322,8 @@ def _resolve_resume(user_id: str, resume_id: str | None) -> dict | None:
 
 
 def mark_opened(user_id: str, application_id: str) -> dict:
-    _update_application(application_id,
-                        {"submission_status": "opened"},
-                        {})
+    if not _update_application(user_id, application_id, {"submission_status": "opened"}, {}):
+        return {"error": "Application not found", "status_code": 404}
     log_event(application_id, user_id, "opened_external", "Opened the external application page")
     return {"submission_status": "opened"}
 
@@ -336,7 +339,8 @@ def confirm_submitted(user_id: str, application_id: str, confirmation_id: str | 
     if confirmation_id:
         full["application_id"] = confirmation_id
     legacy = {"status": "applied", "applied_via": "assisted", "applied_at": _now()}
-    _update_application(application_id, full, legacy)
+    if not _update_application(user_id, application_id, full, legacy):
+        return {"error": "Application not found", "status_code": 404}
     log_event(application_id, user_id, "submitted", "User confirmed the application was submitted",
               {"confirmation_id": confirmation_id})
     return {"status": "applied", "submission_status": "submitted"}
@@ -349,7 +353,8 @@ def mark_failed(user_id: str, application_id: str, reason: str) -> dict:
         "failure_reason": reason,
     }
     legacy = {"status": "matched", "rejection_reason": reason}
-    _update_application(application_id, full, legacy)
+    if not _update_application(user_id, application_id, full, legacy):
+        return {"error": "Application not found", "status_code": 404}
     log_event(application_id, user_id, "failed", reason or "Application could not be submitted")
     return {"submission_status": "failed", "failure_reason": reason}
 

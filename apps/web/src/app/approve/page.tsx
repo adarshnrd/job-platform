@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 export const metadata = { title: "Approve Jobs — JobPlatform AI" };
 
 export default async function ApprovePage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 

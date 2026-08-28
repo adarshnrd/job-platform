@@ -3,19 +3,33 @@ from auth import get_user_id
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 
 from loguru import logger
-import tempfile, os
+import os
+import tempfile
 from database import get_db
 from config import settings
+from services.resume_storage import create_signed_resume_url, new_resume_storage_path
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
 db = get_db()
 
+_MAX_RESUME_BYTES = 10 * 1024 * 1024
+_ALLOWED_RESUME_TYPES = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+
+def _with_signed_url(resume: dict) -> dict:
+    safe_resume = dict(resume)
+    safe_resume["file_url"] = create_signed_resume_url(safe_resume.get("file_url")) or ""
+    return safe_resume
+
 
 @router.get("/")
 async def list_resumes(user_id: str = Depends(get_user_id)):
     result = db.table("resumes").select("*").eq("user_id", user_id).eq("is_active", True).order("created_at", desc=True).execute()
-    return result.data or []
+    return [_with_signed_url(resume) for resume in (result.data or [])]
 
 
 @router.post("/upload")
@@ -26,30 +40,38 @@ async def upload_resume(
     user_id: str = Depends(get_user_id),
 ):
     """Upload a resume file, parse it with AI, and store in Supabase Storage."""
-    if not file.filename.endswith((".pdf", ".docx", ".doc")):
-        raise HTTPException(status_code=400, detail="Only PDF and Word documents are supported")
-    if file.size and file.size > 10 * 1024 * 1024:
+    filename = file.filename or ""
+    suffix = os.path.splitext(filename)[1].lower()
+    content_type = _ALLOWED_RESUME_TYPES.get(suffix)
+    if not content_type:
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX documents are supported")
+    if file.size and file.size > _MAX_RESUME_BYTES:
         raise HTTPException(status_code=400, detail="File size must be under 10MB")
+    if not name.strip() or len(name) > 200:
+        raise HTTPException(status_code=400, detail="Resume name must be between 1 and 200 characters")
 
     try:
         content = await file.read()
-        storage_path = f"{user_id}/{file.filename}"
+        if len(content) > _MAX_RESUME_BYTES:
+            raise HTTPException(status_code=400, detail="File size must be under 10MB")
+        storage_path = new_resume_storage_path(user_id, filename)
 
-        # Upload to Supabase Storage
-        upload_result = db.storage.from_(settings.STORAGE_BUCKET_RESUMES).upload(
+        # The resumes bucket must be private. Store only the object key; URLs are
+        # signed when returned to the authenticated owner.
+        db.storage.from_(settings.STORAGE_BUCKET_RESUMES).upload(
             path=storage_path, file=content,
-            file_options={"content-type": file.content_type or "application/pdf", "upsert": "true"}
+            file_options={"content-type": content_type, "upsert": "false"},
         )
-        file_url = db.storage.from_(settings.STORAGE_BUCKET_RESUMES).get_public_url(storage_path)
 
         # Parse resume text
         parsed_data = {}
-        with tempfile.NamedTemporaryFile(suffix=os.path.splitext(file.filename)[1], delete=False) as tmp:
+        parsed_text = ""
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
 
         try:
-            parsed_text = _extract_text(tmp_path, file.content_type)
+            parsed_text = _extract_text(tmp_path, content_type)
             if parsed_text:
                 from services.ai import call_llm, _parse_json_response
                 parse_prompt = f"""Parse this resume and return structured JSON with keys:
@@ -66,8 +88,8 @@ Resume:\n{parsed_text[:6000]}"""
 
         # Insert record
         record = {
-            "user_id": user_id, "name": name, "file_url": file_url,
-            "file_size": len(content), "file_type": file.content_type,
+            "user_id": user_id, "name": name.strip(), "file_url": storage_path,
+            "file_size": len(content), "file_type": content_type,
             "is_primary": is_primary, "parsed_data": parsed_data,
             "word_count": len(parsed_text.split()) if parsed_data else 0,
         }
@@ -80,7 +102,7 @@ Resume:\n{parsed_text[:6000]}"""
                 "tech_stack": parsed_data.get("tech_stack", {}),
             }).eq("id", user_id).execute()
 
-        return result.data[0] if result.data else record
+        return _with_signed_url(result.data[0] if result.data else record)
     except HTTPException:
         raise
     except Exception as e:

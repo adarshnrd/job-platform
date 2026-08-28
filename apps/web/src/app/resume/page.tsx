@@ -4,7 +4,7 @@ import { ResumeClient } from "@/components/resume/resume-client";
 import { redirect } from "next/navigation";
 
 export default async function ResumePage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
   return (

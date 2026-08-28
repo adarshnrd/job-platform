@@ -4,7 +4,7 @@ import { DashboardClient } from "@/components/dashboard/dashboard-client";
 import { redirect } from "next/navigation";
 
 export default async function DashboardPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 

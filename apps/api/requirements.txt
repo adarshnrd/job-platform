@@ -5,8 +5,11 @@ python-multipart==0.0.9
 httpx==0.27.2
 
 # Database
-supabase==2.7.4
-postgrest==0.17.1
+# 2.7.4 predates Supabase's new sb_secret_/sb_publishable_ API key format —
+# its client rejects those keys with "Invalid API key" even though the
+# server accepts them. 2.31.0+ fixes this; postgrest is pulled in
+# transitively at a matching version, so it's not pinned separately.
+supabase==2.31.0
 
 # Scheduling (replaces Celery/Redis)
 apscheduler==3.10.4

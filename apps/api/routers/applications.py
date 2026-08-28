@@ -418,7 +418,7 @@ async def toggle_star(app_id: str, user_id: str = Depends(get_user_id)):
     if not app.data:
         raise HTTPException(status_code=404)
     new_val = not app.data["is_starred"]
-    db.table("job_applications").update({"is_starred": new_val}).eq("id", app_id).execute()
+    db.table("job_applications").update({"is_starred": new_val}).eq("id", app_id).eq("user_id", user_id).execute()
     return {"is_starred": new_val}
 
 
@@ -442,20 +442,29 @@ async def prepare_application(app_id: str, overrides: dict = Body(default={}), u
 @router.post("/{app_id}/opened")
 async def mark_opened(app_id: str, user_id: str = Depends(get_user_id)):
     """Record that the user opened the external application page."""
-    return application_service.mark_opened(user_id, app_id)
+    result = application_service.mark_opened(user_id, app_id)
+    if result.get("error"):
+        raise HTTPException(status_code=result.get("status_code", 404), detail=result["error"])
+    return result
 
 
 @router.post("/{app_id}/confirm-submit")
 async def confirm_submit(app_id: str, body: dict = Body(default={}), user_id: str = Depends(get_user_id)):
     """User confirms they submitted the application on the external site."""
-    return application_service.confirm_submitted(user_id, app_id, body.get("confirmation_id"))
+    result = application_service.confirm_submitted(user_id, app_id, body.get("confirmation_id"))
+    if result.get("error"):
+        raise HTTPException(status_code=result.get("status_code", 404), detail=result["error"])
+    return result
 
 
 @router.post("/{app_id}/mark-failed")
 async def mark_failed(app_id: str, body: dict = Body(default={}), user_id: str = Depends(get_user_id)):
     """Record that the application could not be submitted, with a reason."""
     reason = body.get("reason") or "Application could not be submitted"
-    return application_service.mark_failed(user_id, app_id, reason)
+    result = application_service.mark_failed(user_id, app_id, reason)
+    if result.get("error"):
+        raise HTTPException(status_code=result.get("status_code", 404), detail=result["error"])
+    return result
 
 
 @router.get("/{app_id}/events")
@@ -575,7 +584,7 @@ async def get_interview_prep(app_id: str, user_id: str = Depends(get_user_id)):
     """Get or generate interview prep content for an application."""
     try:
         # maybe_single() can return None (not a response) when there are zero rows.
-        existing = db.table("interview_prep").select("*").eq("application_id", app_id).maybe_single().execute()
+        existing = db.table("interview_prep").select("*").eq("application_id", app_id).eq("user_id", user_id).maybe_single().execute()
         if existing and existing.data:
             return existing.data
     except Exception as e:
@@ -607,6 +616,9 @@ async def get_interview_prep(app_id: str, user_id: str = Depends(get_user_id)):
 
 @router.get("/{app_id}/history")
 async def get_status_history(app_id: str, user_id: str = Depends(get_user_id)):
+    application = db.table("job_applications").select("id").eq("id", app_id).eq("user_id", user_id).maybe_single().execute()
+    if not (application and application.data):
+        raise HTTPException(status_code=404, detail="Application not found")
     result = db.table("application_status_history").select("*").eq("application_id", app_id).order("changed_at").execute()
     return result.data or []
 
@@ -657,7 +669,7 @@ async def approve_application(app_id: str, background_tasks: BackgroundTasks, us
         }
 
     queue_res = db.table("apply_queue").insert({"application_id": app_id, "user_id": user_id, "priority": 8}).execute()
-    db.table("job_applications").update({"status": "queued"}).eq("id", app_id).execute()
+    db.table("job_applications").update({"status": "queued"}).eq("id", app_id).eq("user_id", user_id).execute()
     background_tasks.add_task(apply_single_job, queue_res.data[0]["id"])
     return {"success": True, "mode": "auto", "message": "Approved and queued for application"}
 
@@ -672,10 +684,10 @@ async def mark_manual_applied(app_id: str, user_id: str = Depends(get_user_id)):
         "status": "applied",
         "applied_via": "manual",
         "applied_at": "now()",
-    }).eq("id", app_id).execute()
+    }).eq("id", app_id).eq("user_id", user_id).execute()
     # Close out any stale queue entries so the scheduler never retries it.
     db.table("apply_queue").update({"status": "completed", "completed_at": "now()"})\
-        .eq("application_id", app_id).in_("status", ["pending", "failed", "rate_limited"]).execute()
+        .eq("application_id", app_id).eq("user_id", user_id).in_("status", ["pending", "failed", "rate_limited"]).execute()
     try:
         application_service.log_event(app_id, user_id, "submitted", "User applied manually via job link")
     except Exception:

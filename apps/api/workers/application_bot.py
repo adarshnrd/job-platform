@@ -582,6 +582,12 @@ async def _download_resume(user_id: str) -> str | None:
     if not resume_url:
         return None
 
+    from services.resume_storage import create_signed_resume_url
+    resume_url = create_signed_resume_url(resume_url)
+    if not resume_url:
+        logger.warning(f"Unable to create a signed resume URL for user {user_id[:8]}…")
+        return None
+
     import httpx
     try:
         async with httpx.AsyncClient() as client:
