@@ -1,7 +1,9 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings, NoDecode
 from pydantic import field_validator
 from functools import lru_cache
 from typing import List, Annotated
+
 
 
 class Settings(BaseSettings):
@@ -45,6 +47,7 @@ class Settings(BaseSettings):
     # Job-source aggregator APIs (optional — sources auto-skip when unset)
     ADZUNA_APP_ID: str = ""
     ADZUNA_APP_KEY: str = ""
+    DICE_API_KEY: str = ""
     JOOBLE_API_KEY: str = ""
     JSEARCH_RAPIDAPI_KEY: str = ""
     CAREERJET_AFFID: str = ""  # free affiliate id from partners.careerjet.com
@@ -129,9 +132,14 @@ class Settings(BaseSettings):
     STORAGE_BUCKET_SCREENSHOTS: str = "screenshots"
 
     class Config:
-        env_file = ".env"
+        env_file = (
+            str(Path(__file__).resolve().parent.parent.parent / ".env"),
+            str(Path(__file__).resolve().parent / ".env"),
+            ".env",
+        )
         case_sensitive = True
         extra = "ignore"  # .env also holds frontend NEXT_PUBLIC_* vars
+
 
 
 @lru_cache()

@@ -4,7 +4,7 @@ import { AnswersClient } from "@/components/answers/answers-client";
 import { redirect } from "next/navigation";
 
 export default async function AnswersPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
   return (
