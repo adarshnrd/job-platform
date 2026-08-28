@@ -1,0 +1,12 @@
+{
+  "name": "job-platform-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Job Platform workspace root runner scripts",
+  "scripts": {
+    "dev": "bash ./scripts/start.sh",
+    "dev:backend": "cd apps/api && ( [ -f venv/bin/python ] && ./venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload || python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload )",
+    "dev:frontend": "cd apps/web && npm run dev",
+    "install:all": "make install"
+  }
+}
