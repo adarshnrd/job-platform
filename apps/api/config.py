@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # Groq (free, OpenAI-compatible)
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "qwen/qwen3.8-27b"
 
     # NVIDIA NIM (free credits, OpenAI-compatible)
     NVIDIA_API_KEY: str = ""

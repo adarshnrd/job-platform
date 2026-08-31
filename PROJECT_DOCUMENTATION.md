@@ -2287,7 +2287,7 @@ Errors are captured at multiple levels:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | — | Frontend anonymous key |
 | `NEXT_PUBLIC_API_URL` | No | `http://localhost:8000` | Backend API URL |
 | `GROQ_API_KEY` | No* | — | Groq API key (* at least one LLM key required) |
-| `GROQ_MODEL` | No | `llama-3.3-70b-versatile` | Groq model ID |
+| `GROQ_MODEL` | No | `qwen/qwen3.8-27b` | Groq model ID |
 | `NVIDIA_API_KEY` | No* | — | NVIDIA NIM API key |
 | `NVIDIA_MODEL` | No | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | NVIDIA model |
 | `OPENAI_API_KEY` | No | — | For embeddings (text-embedding-3-small) |
