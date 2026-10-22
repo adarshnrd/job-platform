@@ -1,0 +1,17 @@
+title = "Gitleaks Configuration — job-platform"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlists for known false positives"
+paths = [
+  # Test fixture HTML scraped from third-party sites — posthog keys belong to
+  # the scraped site (Emploitic), not this project.
+  '''apps/api/tests/fixtures/.*\.html''',
+  # SmartRecruiters company slugs (e.g. EtihadAirways5) are public URL
+  # identifiers used in careers.smartrecruiters.com/<slug>. They are stored
+  # in a field named "token" in our config but are NOT secrets.
+  '''apps/api/scrapers/ats\.py''',
+  '''docs/mena/PHASE_1_ATS_EMPLOYERS\.md''',
+]
