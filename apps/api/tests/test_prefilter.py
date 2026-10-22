@@ -1,7 +1,7 @@
 """Tests for the rule-based relevance prefilter (pre-LLM cost gate)."""
 from types import SimpleNamespace
 
-from services.prefilter import build_user_keywords, is_relevant, prefilter_jobs
+from services.prefilter import build_user_keywords, is_relevant, rejected_indices
 
 USER = {
     "skills": ["Node.js", "TypeScript", "Express.js", "NestJS", "PostgreSQL"],
@@ -59,21 +59,20 @@ def test_empty_profile_keeps_everything():
     kw = build_user_keywords({"skills": [], "headline": "", "career_goals": ""})
     assert kw == set()
     jobs = [_job("Sales Manager", "sell things to enterprise clients across the region and beyond")]
-    kept, dropped = prefilter_jobs(jobs, {"skills": [], "headline": ""})
-    assert dropped == 0 and kept == jobs
+    assert rejected_indices(jobs, {"skills": [], "headline": ""}) == set()
 
 
-def test_prefilter_jobs_counts_and_order():
+def test_rejected_indices_flags_offprofile_positions():
     jobs = [
         _job("Backend Engineer", "Node.js microservices at scale for our platform team"),
         _job("Regional Sales Head", "Own the P&L and lead the field sales team to hit quarterly quota targets"),
         _job("Full Stack Developer", "React and Express across the whole product surface area"),
         _job("Chartered Accountant", "Manage statutory audit, taxation and financial compliance filings end to end"),
     ]
-    kept, dropped = prefilter_jobs(jobs, USER)
-    kept_titles = [j.title for j in kept]
+    rejected = rejected_indices(jobs, USER)
+    assert rejected == {1, 3}
+    kept_titles = [j.title for i, j in enumerate(jobs) if i not in rejected]
     assert kept_titles == ["Backend Engineer", "Full Stack Developer"]
-    assert dropped == 2
 
 
 def test_build_user_keywords_is_skills_only():
@@ -84,3 +83,43 @@ def test_build_user_keywords_is_skills_only():
     # match sales roles at tech companies). Role coverage is title-only.
     assert "engineer" not in kw
     assert "ai" not in kw
+
+
+# ── MENA: French/Arabic vocabulary and nationals-only (PHASE_0 §0.5) ──
+
+def test_french_developer_title_passes_without_skill_match():
+    kw = build_user_keywords({"skills": ["react"]})
+    job = _job("Développeur Full Stack", "Rejoignez notre équipe pour construire des produits de qualité")
+    assert is_relevant(job, kw)
+
+
+def test_arabic_developer_title_passes():
+    kw = build_user_keywords({"skills": ["react"]})
+    assert is_relevant(_job("مطور برمجيات", "نبحث عن مطور للانضمام إلى فريقنا في الرياض لبناء منتجات"), kw)
+
+
+def test_french_civil_engineer_is_rejected():
+    kw = build_user_keywords({"skills": ["react"]})
+    job = _job("Ingénieur génie civil", "Supervision de chantier, béton armé et suivi des travaux de construction")
+    assert not is_relevant(job, kw)
+
+
+def test_nationals_only_rejected_even_when_skills_match(monkeypatch):
+    from config import settings
+    user = {"skills": ["react"]}
+    jobs = [_job("Software Engineer (UAE National)", "React and TypeScript product work in Dubai office")]
+    monkeypatch.setattr(settings, "MENA_EXCLUDE_NATIONALS_ONLY", True)
+    assert rejected_indices(jobs, user) == {0}
+
+    monkeypatch.setattr(settings, "MENA_EXCLUDE_NATIONALS_ONLY", False)
+    assert rejected_indices(jobs, user) == set()
+
+
+def test_nationals_only_rejected_for_user_without_keywords(monkeypatch):
+    from config import settings
+    monkeypatch.setattr(settings, "MENA_EXCLUDE_NATIONALS_ONLY", True)
+    jobs = [
+        _job("Associate Director - Emiratized Role", "Lead the education sector team"),
+        _job("Backend Engineer", "Node.js microservices at scale"),
+    ]
+    assert rejected_indices(jobs, {"skills": []}) == {0}

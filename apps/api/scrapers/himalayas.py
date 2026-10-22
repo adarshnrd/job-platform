@@ -4,7 +4,8 @@ https://himalayas.app/jobs/api
 
 The API has no keyword parameter, so the query is matched client-side against
 title/description (same approach as the ATS aggregator). locationRestrictions
-is honored so India users only see jobs open to them; seniority maps onto
+is honored so India users only see jobs open to them (and MENA users only
+roles open to MENA/EMEA/worldwide, via services.geo.mena.remote_ok_for_mena); seniority maps onto
 experience_level.
 """
 import re
@@ -12,6 +13,7 @@ import re
 from loguru import logger
 from scrapers.api_base import APIBaseScraper
 from models.job import ExperienceLevel, JobListingCreate, Platform
+from services.geo import mena
 
 _HTML = re.compile(r"<[^>]+>")
 _STOPWORDS = {"the", "and", "for", "with", "job", "jobs", "developer", "engineer", "role"}
@@ -27,7 +29,7 @@ _LEVELS = {
 class HimalayasScraper(APIBaseScraper):
     platform = Platform.himalayas
     requires_key = False
-    regions = {"global", "india"}
+    regions = {"global", "india", "mena"}
     rate_limit_per_minute = 20
     API_URL = "https://himalayas.app/jobs/api"
 
@@ -56,6 +58,8 @@ class HimalayasScraper(APIBaseScraper):
                 continue
             restrictions = [str(r).lower() for r in (item.get("locationRestrictions") or [])]
             if region == "india" and restrictions and "india" not in restrictions:
+                continue
+            if region == "mena" and not mena.remote_ok_for_mena(item.get("locationRestrictions") or []):
                 continue
             jd = self._clean_text(_HTML.sub(" ", item.get("description") or item.get("excerpt") or ""))
             if tokens and not any(t in f"{item.get('title', '')} {jd}".lower() for t in tokens):

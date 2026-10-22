@@ -15,7 +15,7 @@ import { RunLedger } from "./run-ledger";
 import { SourceHealthPanel } from "./source-health";
 import { CoverageSummaryPanel } from "./coverage-summary";
 
-type Region = "india" | "global";
+type Region = "india" | "global" | "mena";
 type Tab = "live" | "history" | "sources" | "ai";
 
 const TABS: Array<{ key: Tab; label: string; icon: typeof Activity }> = [
@@ -148,14 +148,14 @@ export function ActivityClient() {
         </div>
         <div className="flex items-center gap-3">
           <div className="flex rounded-lg border border-zinc-800 overflow-hidden">
-            {(["india", "global"] as Region[]).map((r) => (
+            {(["india", "global", "mena"] as Region[]).map((r) => (
               <button key={r} onClick={() => setRegion(r)}
                 className={cn(
                   "px-3 py-2 text-sm flex items-center gap-1.5 transition-colors",
                   region === r ? "bg-amber-500 text-black font-semibold" : "bg-zinc-900 text-zinc-400 hover:text-zinc-100"
                 )}>
                 {r === "india" ? <MapPin size={14} /> : <Globe size={14} />}
-                {r === "india" ? "India" : "Global"}
+                {{ india: "India", global: "Global", mena: "MENA" }[r]}
               </button>
             ))}
           </div>

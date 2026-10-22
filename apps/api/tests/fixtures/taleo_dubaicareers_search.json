@@ -1,0 +1,100 @@
+{
+ "requisitionList": [
+  {
+   "hotJob": true,
+   "addedToJobCart": false,
+   "draft": false,
+   "alreadyAppliedOn": false,
+   "toReApply": false,
+   "jobId": "168455",
+   "contestNo": "26003340",
+   "column": [
+    "Office Manager- Corporate Administrative Support Services CEO",
+    "16/10/2026",
+    "UAE Only"
+   ],
+   "linkedColumn": 0,
+   "locationsColumns": []
+  },
+  {
+   "hotJob": true,
+   "addedToJobCart": false,
+   "draft": false,
+   "alreadyAppliedOn": false,
+   "toReApply": false,
+   "jobId": "153754",
+   "contestNo": "26001069",
+   "column": [
+    "Senior Engineer - Rail Network Permits and Services",
+    "13/10/2026",
+    "All Nationalities (Priority for UAE National)"
+   ],
+   "linkedColumn": 0,
+   "locationsColumns": []
+  },
+  {
+   "hotJob": true,
+   "addedToJobCart": false,
+   "draft": false,
+   "alreadyAppliedOn": false,
+   "toReApply": false,
+   "jobId": "167675",
+   "contestNo": "26003247",
+   "column": [
+    "Chief Analyst - information Security",
+    "06/10/2026",
+    "All Nationalities (Priority for UAE National)"
+   ],
+   "linkedColumn": 0,
+   "locationsColumns": []
+  }
+ ],
+ "facetResults": [
+  {
+   "id": "ORGANIZATION",
+   "facetValueResults": [
+    {
+     "id": "4305100456",
+     "text": "Roads and Transport Authority",
+     "quantity": "73",
+     "level": 2
+    },
+    {
+     "id": "34105011891",
+     "text": "Dubai Government",
+     "quantity": "54",
+     "level": 2
+    },
+    {
+     "id": "12105011891",
+     "text": "Dubai Culture",
+     "quantity": "42",
+     "level": 2
+    },
+    {
+     "id": "6105100456",
+     "text": "Dubai Government Human Resource Department",
+     "quantity": "26",
+     "level": 2
+    },
+    {
+     "id": "22205011891",
+     "text": "Dubai Media Incorporated",
+     "quantity": "18",
+     "level": 2
+    }
+   ],
+   "levelList": [
+    {
+     "level": 2,
+     "name": "Employer"
+    }
+   ]
+  }
+ ],
+ "pagingData": {
+  "currentPageNo": 1,
+  "pageSize": 25,
+  "totalCount": 382
+ }
+}

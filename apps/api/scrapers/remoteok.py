@@ -16,6 +16,7 @@ from loguru import logger
 
 from models.job import ExperienceLevel, JobListingCreate, JobType, Platform, WorkMode
 from scrapers.api_base import APIBaseScraper
+from services.geo import mena
 
 _HTML = re.compile(r"<[^>]+>")
 _STOPWORDS = {"the", "and", "for", "with", "job", "jobs", "role", "roles"}
@@ -35,7 +36,7 @@ _JOB_TYPES: dict[str, JobType] = {
 class RemoteOKScraper(APIBaseScraper):
     platform = Platform.remoteok
     requires_key = False
-    regions = {"global", "india"}
+    regions = {"global", "india", "mena"}
     rate_limit_per_minute = 6
     API_URL = "https://remoteok.com/api"
 
@@ -69,6 +70,10 @@ class RemoteOKScraper(APIBaseScraper):
             title = str(item.get("position") or "")
             haystack = f"{title} {' '.join(tags)}".lower()
             if tokens and not any(t in haystack for t in tokens):
+                continue
+
+            # RemoteOK's convention: an empty location means worldwide.
+            if region == "mena" and not mena.remote_ok_for_mena(item.get("location") or ""):
                 continue
 
             url = item.get("url") or f"https://remoteok.com/remote-jobs/{item.get('slug')}"

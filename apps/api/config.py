@@ -14,9 +14,9 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api/v1"
     ALLOWED_ORIGINS: Annotated[List[str], NoDecode] = ["http://localhost:3000", "https://yourdomain.com"]
 
-    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @field_validator("ALLOWED_ORIGINS", "MENA_DEFAULT_LOCATIONS", mode="before")
     @classmethod
-    def _split_origins(cls, v):
+    def _split_csv(cls, v):
         # Accept a comma-separated string in .env (not just a JSON array).
         if isinstance(v, str):
             return [o.strip() for o in v.split(",") if o.strip()]
@@ -91,6 +91,20 @@ class Settings(BaseSettings):
     # Health-driven scheduling: back off hard-broken sources (consecutive errors),
     # probing for recovery every Nth run. Uses telemetry source-health.
     DISCOVERY_HEALTH_SCHEDULING_ENABLED: bool = True
+
+    # ── MENA region (docs/mena/) ──
+    # Searched when a MENA run has no MENA city in preferred_locations.
+    MENA_DEFAULT_LOCATIONS: Annotated[List[str], NoDecode] = [
+        "United Arab Emirates", "Saudi Arabia", "Egypt", "Qatar",
+    ]
+    # Drop postings reserved for citizens (Emiratisation/Saudisation) before AI
+    # scoring. They stay stored as prefiltered, so flipping this is replayable.
+    MENA_EXCLUDE_NATIONALS_ONLY: bool = True
+    # foundit Gulf (www.founditgulf.com) uses the same /middleware/jobsearch API
+    # as foundit.in, but its robots.txt disallows /middleware/. Off by default;
+    # the owner decides (docs/mena/PHASE_2_REGIONAL_BOARDS.md §2.1). With it off,
+    # mena runs return nothing from foundit; india/global are unaffected.
+    MENA_FOUNDIT_GULF_ENABLED: bool = False
 
     # ── Durable discovery pipeline (database/16_pipeline_durability.sql) ──
     # Scraped jobs are persisted the moment a scraper returns them; the AI

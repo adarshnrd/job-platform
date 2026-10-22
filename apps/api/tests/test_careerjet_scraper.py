@@ -64,3 +64,28 @@ async def test_handles_no_jobs_type(monkeypatch):
 
     jobs = await scraper.search_jobs("x", "y", region="india")
     assert jobs == []
+
+
+@pytest.mark.asyncio
+async def test_global_region_uses_gbp_currency(monkeypatch):
+    from scrapers import careerjet as cj_mod
+    monkeypatch.setattr(cj_mod.settings, "CAREERJET_AFFID", "test_affid_123")
+    payload = {"type": "JOBS", "jobs": [{
+        "title": "Platform Engineer", "company": "Acme", "locations": "London",
+        "salary_min": "50000", "salary_max": "70000",
+        "url": "https://www.careerjet.co.uk/jobad/xyz", "description": "Build things",
+    }]}
+
+    async def fake_get(url, params=None, headers=None):
+        assert params["locale_code"] == "en_GB"
+        return payload
+
+    scraper = CareerjetScraper()
+    monkeypatch.setattr(scraper, "_get_json", fake_get)
+
+    async def noop():
+        return None
+    monkeypatch.setattr(scraper.rate_limiter, "acquire", noop)
+
+    jobs = await scraper.search_jobs("platform", "London", region="global")
+    assert len(jobs) == 1 and jobs[0].salary_currency == "GBP"

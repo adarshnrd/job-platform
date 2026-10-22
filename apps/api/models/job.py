@@ -4,6 +4,9 @@ from enum import Enum
 from datetime import datetime
 import uuid
 
+# Discovery regions. "india" stays the default (India-first deployment).
+VALID_REGIONS: tuple[str, ...] = ("india", "global", "mena")
+
 
 class Platform(str, Enum):
     linkedin = "linkedin"
@@ -36,6 +39,11 @@ class Platform(str, Enum):
     careerjet = "careerjet"
     jobicy = "jobicy"
     himalayas = "himalayas"
+    # MENA sources (docs/mena/)
+    sabbar = "sabbar"
+    emploitic = "emploitic"
+    keejob = "keejob"
+    rekrute = "rekrute"
     # Global-first sources (phase: global expansion)
     arc = "arc"
     welcometothejungle = "welcometothejungle"
@@ -141,7 +149,7 @@ class DiscoveryRequest(BaseModel):
     # None = "use my saved preference" (resolved per-user at the endpoint via
     # workers.job_discovery.resolve_region). An explicit value still wins, so a
     # one-off global run doesn't have to change the stored setting.
-    region: Optional[str] = None  # "india" | "global" | None
+    region: Optional[str] = None  # "india" | "global" | "mena" | None
     custom_keywords: Optional[List[str]] = None
     location_override: Optional[str] = None
     max_jobs: int = 50
@@ -151,4 +159,4 @@ class DiscoveryRequest(BaseModel):
     def _valid_region(cls, v):
         if v is None:
             return None
-        return v if v in ("india", "global") else "india"
+        return v if v in VALID_REGIONS else "india"

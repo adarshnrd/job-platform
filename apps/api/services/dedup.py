@@ -8,21 +8,38 @@ platform are deliberately excluded — applying twice to the same role at the
 same company is duplicate-application spam no matter which board or city
 slug it was scraped from.
 
+Normalization is Unicode-aware: an ASCII-only filter reduced every Arabic
+title to "" and merged them all under one key. Pure-ASCII input normalizes
+exactly as before, so existing India/global keys are unchanged.
+
 Keep the normalization here in sync with job_dedupe_key() in
-database/11_job_dedup.sql.
+database/17_mena_region.sql (originally database/11_job_dedup.sql).
 """
 import re
+import unicodedata
 
 # Legal/boilerplate suffixes that vary between boards for the same employer
-# ("Accenture" vs "Accenture Solutions Pvt Ltd").
+# ("Accenture" vs "Accenture Solutions Pvt Ltd"). The MENA/French legal forms
+# are whole tokens after normalization: dots are already gone, so "W.L.L."
+# arrives as "w l l".
 _COMPANY_NOISE = re.compile(
-    r"\b(private|pvt|ltd|limited|inc|incorporated|llc|llp|corp|corporation|co)\b"
+    r"\b(private|pvt|ltd|limited|inc|incorporated|llc|llp|corp|corporation|co"
+    r"|fz|fze|fzco|fzc|wll|w l l|spc|saog|saoc|sae|s a e|pjsc|psc|plc|sarl|s a r l|spa|sas|est"
+    r"|شركة|مؤسسة|المحدودة|ذ م م)\b"
 )
-_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+# Arabic diacritics (tashkeel), superscript alef and tatweel: presentation
+# only, and boards are inconsistent about including them.
+# Ranges are explicit (not 064B-0670) so Arabic-Indic digits U+0660-0669 survive.
+_AR_MARKS = re.compile(r"[ً-ٰٟـ]")
+_NON_WORD = re.compile(r"[\W_]+")   # Unicode-aware: keeps Arabic and accented letters
 
 
 def _norm(text: str) -> str:
-    return " ".join(_NON_ALNUM.sub(" ", (text or "").lower()).split())
+    # Latin accents are deliberately kept: Postgres can't fold them without the
+    # unaccent extension, and the SQL twin must produce identical keys.
+    text = unicodedata.normalize("NFKC", (text or "")).lower()
+    text = _AR_MARKS.sub("", text)
+    return " ".join(_NON_WORD.sub(" ", text).split())
 
 
 def normalize_title(title: str) -> str:

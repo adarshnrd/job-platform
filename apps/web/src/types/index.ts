@@ -9,7 +9,7 @@ export type MatchTier = "auto_apply" | "recommended" | "watchlist" | "archived";
 export type WorkMode = "remote" | "hybrid" | "onsite";
 export type JobType = "full_time" | "part_time" | "contract" | "freelance" | "internship";
 export type ExperienceLevel = "entry" | "mid" | "senior" | "lead" | "principal" | "executive";
-export type Platform = "linkedin" | "naukri" | "indeed" | "wellfound" | "hirist" | "instahyre" | "cutshort" | "glassdoor" | "foundit" | "remoteok" | "weworkremotely" | "iimjobs" | "timesjobs" | "shine" | "freshersworld" | "ycombinator" | "dice" | "ziprecruiter" | "remotive" | "arbeitnow" | "themuse" | "adzuna" | "jooble" | "jsearch" | "careerjet" | "jobicy" | "himalayas" | "company_portal" | "other";
+export type Platform = "linkedin" | "naukri" | "indeed" | "wellfound" | "hirist" | "instahyre" | "cutshort" | "glassdoor" | "foundit" | "remoteok" | "weworkremotely" | "iimjobs" | "timesjobs" | "shine" | "freshersworld" | "ycombinator" | "dice" | "ziprecruiter" | "remotive" | "arbeitnow" | "themuse" | "adzuna" | "jooble" | "jsearch" | "careerjet" | "jobicy" | "himalayas" | "sabbar" | "emploitic" | "keejob" | "rekrute" | "company_portal" | "other";
 
 export interface DiscoverySource {
   name: Platform;

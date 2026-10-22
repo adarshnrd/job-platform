@@ -67,10 +67,11 @@ PORTALS: dict[str, PortalCapabilities] = {
         requires_session=True, anti_bot="medium",
     ),
     "foundit": PortalCapabilities(
-        "foundit", "Foundit", "A", ("india", "global"),
+        "foundit", "Foundit", "A", ("india", "global", "mena"),
         auto_apply=True, resume_upload=True, question_detection=True,
         requires_session=True, anti_bot="medium", aliases=("monster",),
-        notes="Discovery via the site's own JSON API; also covers SG/ID/HK boards.",
+        notes="Discovery via the site's own JSON API; also covers SG/ID/HK boards. "
+              "The Gulf board (mena) runs only when MENA_FOUNDIT_GULF_ENABLED is on.",
     ),
     "hirist": PortalCapabilities(
         "hirist", "Hirist", "A", ("india",),
@@ -188,6 +189,24 @@ PORTALS: dict[str, PortalCapabilities] = {
         requires_session=True, anti_bot="medium",
         notes="Paywalled. Only the free /publicjobs tier is read, and those links "
               "commonly resolve to removed postings (410). Opt-in.",
+    ),
+
+    # ── MENA regional boards (docs/mena/) — discovery/display only ────────
+    "sabbar": PortalCapabilities(
+        "sabbar", "Sabbar", "C", ("mena",), anti_bot="low",
+        notes="Saudi Arabia. Sitemap + schema.org JobPosting; robots.txt allows crawling.",
+    ),
+    "emploitic": PortalCapabilities(
+        "emploitic", "Emploitic", "C", ("mena",), anti_bot="low",
+        notes="Algeria. Search page __NEXT_DATA__ carries the full JD; /partenaires/ is never fetched.",
+    ),
+    "keejob": PortalCapabilities(
+        "keejob", "Keejob", "C", ("mena",), anti_bot="low",
+        notes="Tunisia. HTML list + JobPosting JSON-LD detail; /api/ is disallowed and never fetched.",
+    ),
+    "rekrute": PortalCapabilities(
+        "rekrute", "ReKrute", "C", ("mena",), anti_bot="low",
+        notes="Morocco (+TN/DZ). Sitemap + JobPosting JSON-LD; the /offres.html search page is not used.",
     ),
 
     # ── Documented-unsupported (kept visible so the UI can explain why) ───

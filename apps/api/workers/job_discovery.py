@@ -4,7 +4,7 @@ Runs directly via FastAPI BackgroundTasks (no Redis/Celery needed).
 
 Sources are organized in a region-aware registry. Each entry declares whether
 it is API-based, whether it needs a key (auto-skipped when absent), and which
-regions ("india" / "global") it serves.
+regions ("india" / "global" / "mena") it serves.
 """
 import asyncio
 import inspect
@@ -42,12 +42,19 @@ from scrapers.careerjet import CareerjetScraper
 from scrapers.jobicy import JobicyScraper
 from scrapers.himalayas import HimalayasScraper
 from scrapers.ats import ATSAggregatorScraper
+# MENA regional boards (docs/mena/PHASE_2_REGIONAL_BOARDS.md)
+from scrapers.sabbar import SabbarScraper
+from scrapers.emploitic import EmploiticScraper
+from scrapers.keejob import KeejobScraper
+from scrapers.rekrute import RekruteScraper
 # Global-first sources (phase: global expansion)
 from scrapers.arc import ArcScraper
 from scrapers.welcometothejungle import WelcomeToTheJungleScraper
 from scrapers.peerlist import PeerlistScraper
 from scrapers.flexjobs import FlexJobsScraper
 from config import settings
+from models.job import VALID_REGIONS
+from services.geo import mena
 from services import discovery_progress as progress
 from services import job_pipeline as pipeline
 from services.dedup import job_fingerprint
@@ -81,7 +88,7 @@ class Source:
 SOURCE_REGISTRY: dict[str, Source] = {
     # ── Playwright / login scrapers (India market) ──
     "naukri":         Source("naukri", NaukriScraper, False, False, {"india"}, login_capable=True),
-    "linkedin":       Source("linkedin", LinkedInScraper, False, False, {"india", "global"}, login_capable=True),
+    "linkedin":       Source("linkedin", LinkedInScraper, False, False, {"india", "global", "mena"}, login_capable=True),
     "indeed":         Source("indeed", IndeedScraper, False, False, {"india", "global"}, login_capable=True, discoverable=False),
     "instahyre":      Source("instahyre", InstahyreScraper, False, False, {"india"}, login_capable=True, discoverable=False),
     "shine":          Source("shine", ShineScraper, False, False, {"india"}),
@@ -110,27 +117,36 @@ SOURCE_REGISTRY: dict[str, Source] = {
     # Foundit runs off the site's own /middleware/jobsearch JSON API (the HTML
     # search is Akamai-walled). One deployment per country shares that API, so
     # it serves both regions.
-    "foundit":        Source("foundit", FounditScraper, True, False, {"india", "global"}),
-    "remoteok":       Source("remoteok", RemoteOKScraper, True, False, {"global", "india"}),
+    # The mena region reaches the Gulf deployment only while
+    # settings.MENA_FOUNDIT_GULF_ENABLED is on (robots.txt disallows its API).
+    "foundit":        Source("foundit", FounditScraper, True, False, {"india", "global", "mena"}),
+    "remoteok":       Source("remoteok", RemoteOKScraper, True, False, {"global", "india", "mena"}),
     # RSS-based — no browser, despite the board itself being Cloudflare-fronted.
     "weworkremotely": Source("weworkremotely", WeWorkRemotelyScraper, True, False, {"global"}),
-    "remotive":       Source("remotive", RemotiveScraper, True, False, {"global", "india"}),
+    "remotive":       Source("remotive", RemotiveScraper, True, False, {"global", "india", "mena"}),
     "timesjobs":      Source("timesjobs", TimesJobsScraper, True, False, {"india"}),
     "hirist":         Source("hirist", HiristScraper, True, False, {"india"}),
     "iimjobs":        Source("iimjobs", IimjobsScraper, True, False, {"india"}),
-    # ATS-direct: many company career boards (Greenhouse/Lever/Ashby) in one
-    # source. Region-aware: india runs keep only India roles, global runs keep
-    # the overseas postings those same boards carry.
-    "ats":            Source("ats", ATSAggregatorScraper, True, False, {"india", "global"}),
+    # ATS-direct: many company career boards (Greenhouse/Lever/Ashby, plus Oracle
+    # HCM/Workday/BambooHR/Teamtailor for the Gulf) in one source. Region-aware:
+    # india runs keep only India roles, global runs keep the overseas postings
+    # those same boards carry, and mena runs load the MENA board set and
+    # interleave employers so a small per-search cap still spans several.
+    "ats":            Source("ats", ATSAggregatorScraper, True, False, {"india", "global", "mena"}),
     "arbeitnow":      Source("arbeitnow", ArbeitnowScraper, True, False, {"global"}),
     "themuse":        Source("themuse", TheMuseScraper, True, False, {"india", "global"}),
-    "jobicy":         Source("jobicy", JobicyScraper, True, False, {"global", "india"}),
-    "himalayas":      Source("himalayas", HimalayasScraper, True, False, {"global", "india"}),
+    "jobicy":         Source("jobicy", JobicyScraper, True, False, {"global", "india", "mena"}),
+    "himalayas":      Source("himalayas", HimalayasScraper, True, False, {"global", "india", "mena"}),
+    # ── MENA country boards (each answers only its own country) ──
+    "sabbar":         Source("sabbar", SabbarScraper, True, False, {"mena"}),
+    "emploitic":      Source("emploitic", EmploiticScraper, True, False, {"mena"}),
+    "keejob":         Source("keejob", KeejobScraper, True, False, {"mena"}),
+    "rekrute":        Source("rekrute", RekruteScraper, True, False, {"mena"}),
     # ── API-first keyed sources (dormant until keys set) ──
     "adzuna":         Source("adzuna", AdzunaScraper, True, True, {"india", "global"}),
-    "jooble":         Source("jooble", JoobleScraper, True, True, {"india", "global"}),
-    "jsearch":        Source("jsearch", JSearchScraper, True, True, {"india", "global"}),
-    "careerjet":      Source("careerjet", CareerjetScraper, True, True, {"india", "global"}),
+    "jooble":         Source("jooble", JoobleScraper, True, True, {"india", "global", "mena"}),
+    "jsearch":        Source("jsearch", JSearchScraper, True, True, {"india", "global", "mena"}),
+    "careerjet":      Source("careerjet", CareerjetScraper, True, True, {"india", "global", "mena"}),
 }
 
 def select_sources(region: str, preferred_platforms: list[str]) -> list[Source]:
@@ -143,7 +159,7 @@ def select_sources(region: str, preferred_platforms: list[str]) -> list[Source]:
       every regional scraper runs (public, unauthenticated search — login only
       matters at apply time). A non-empty list narrows to that subset.
     """
-    region = region if region in ("india", "global") else "india"
+    region = region if region in VALID_REGIONS else "india"
     selected: dict[str, Source] = {}
 
     for name, src in SOURCE_REGISTRY.items():
@@ -156,10 +172,8 @@ def select_sources(region: str, preferred_platforms: list[str]) -> list[Source]:
         if src.requires_key and not _has_key(src.cls):
             continue
         # API-first sources (keyless, or keyed with key present) are always on.
-        if src.api_based:
-            selected[name] = src
         # Playwright sources: all by default; user list narrows the set.
-        elif not preferred_platforms or name in preferred_platforms:
+        if src.api_based or not preferred_platforms or name in preferred_platforms:
             selected[name] = src
 
     return list(selected.values())
@@ -175,8 +189,10 @@ INDIA_LOCATION_HINTS = (
 
 
 def infer_region(preferred_locations: list[str] | None) -> str:
-    """Region for a user's locations. City names imply india; empty defaults
-    to india (this is an India-first deployment).
+    """Region for a user's locations. City names imply india (checked first, so
+    a mixed Dubai + Bangalore profile stays india); otherwise any MENA city or
+    country implies mena; empty defaults to india (this is an India-first
+    deployment) and anything else is global.
 
     Inference only — `resolve_region` applies the user's explicit choice first.
     """
@@ -187,6 +203,8 @@ def infer_region(preferred_locations: list[str] | None) -> str:
         low = loc.lower()
         if any(hint in low for hint in INDIA_LOCATION_HINTS):
             return "india"
+    if any(mena.is_mena(loc) for loc in locations):
+        return "mena"
     return "global"
 
 
@@ -202,9 +220,24 @@ def resolve_region(user: dict | None) -> str:
     """
     user = user or {}
     choice = str(user.get("discovery_region") or "").strip().lower()
-    if choice in ("india", "global"):
+    if choice in VALID_REGIONS:
         return choice
     return infer_region(user.get("preferred_locations"))
+
+
+def search_locations(region: str, preferred_locations: list[str] | None) -> list[str]:
+    """Locations to fan a run out over.
+
+    A MENA run for someone whose saved cities are Indian (explicit region
+    override) must not search "Bangalore" on Gulf boards: keep only the MENA
+    entries, else fall back to the MENA defaults. Other regions keep today's
+    behaviour exactly.
+    """
+    locs = [loc for loc in (preferred_locations or []) if loc]
+    if region == "mena":
+        mena_locs = [loc for loc in locs if mena.is_mena(loc)]
+        return mena_locs or list(settings.MENA_DEFAULT_LOCATIONS)
+    return locs or ["India"]
 
 
 def build_search_pairs(
@@ -290,7 +323,7 @@ async def _discover_for_user_async(user_id: str, region: str = "india", run_id: 
     queries = list(set(q for q in queries if q))[:3]
     if not queries:
         queries = ["software developer"]
-    locations = [loc for loc in (preferred_locations or []) if loc] or ["India"]
+    locations = search_locations(region, preferred_locations)
     # Rotate the capped query×city matrix hourly so every run covers a
     # different slice and the full matrix is walked across a day's runs.
     search_pairs = build_search_pairs(
