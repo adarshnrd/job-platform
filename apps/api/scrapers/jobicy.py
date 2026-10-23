@@ -12,6 +12,7 @@ import re
 from loguru import logger
 from scrapers.api_base import APIBaseScraper
 from models.job import ExperienceLevel, JobListingCreate, Platform
+from services.geo import mena
 
 _HTML = re.compile(r"<[^>]+>")
 
@@ -30,7 +31,7 @@ _INDIA_OK = ("anywhere", "worldwide", "india", "apac", "asia", "emea")
 class JobicyScraper(APIBaseScraper):
     platform = Platform.jobicy
     requires_key = False
-    regions = {"global", "india"}
+    regions = {"global", "india", "mena"}
     rate_limit_per_minute = 20
     API_URL = "https://jobicy.com/api/v2/remote-jobs"
 
@@ -44,6 +45,8 @@ class JobicyScraper(APIBaseScraper):
                 continue
             geo = (item.get("jobGeo") or "").lower()
             if region == "india" and geo and not any(tok in geo for tok in _INDIA_OK):
+                continue
+            if region == "mena" and geo and not mena.remote_ok_for_mena(geo):
                 continue
             level_raw = (item.get("jobLevel") or "").lower()
             level = next((v for k, v in _LEVELS.items() if k in level_raw), None)

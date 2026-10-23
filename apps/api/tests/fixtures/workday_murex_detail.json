@@ -1,0 +1,39 @@
+{
+ "jobPostingInfo": {
+  "id": "3597c7a334da1001eaf10f987ab00000",
+  "title": "Software Engineer (Java)",
+  "jobDescription": "<p><span style=\"font-size:inherit\">Murex is a global fintech leader in trading, risk management and processing solutions for capital markets.</span></p><p><span style=\"font-size:inherit\">Operating from our 19 offices, 3 400 Murexians from over 65 different nationalities ensure the development, implementation and support of our platform which is used by banks, asset managers, corporations and utilities, across the world. </span></p><p><span style=\"font-size:inherit\">Join Murex and work on the challenges of an industry at the forefront of innovation and thrive in a people-centric environment. You’ll be part of one global team where you can learn fast and stay true to yourself.</span></p><p></p><p></p><h2>Mission</h2><h2></h2><p><br />Provide, develop, implement and evolve technical solutions for the Murex production chain and all the major activities that are related to it.</p><p></p><h2></h2><h2><br />Your Responsibilities</h2><p></p><p></p><ul><li><p>Design, develop, test, deploy and maintain software</p></li><li><p>Study functional specifications and translate them to technical design</p></li><li><p>Document code throughout the development process</p></li><li><p>Work within Scaled Agile Framework practices</p></li><li><p>Enhance product quality by detecting bugs at an early stage: Be an advocate of automation, Test Driven Development, Continuous Integration and Continuous Delivery</p></li><li><p>Continuously learn and improve Functional, Technical and Leadership skills</p></li></ul><h2><br /><br />Job Requirements</h2><ul><li><p>Bachelor’s degree in Computer Science or Engineering and/or equivalent experience</p></li><li><p>0-4 years of experience</p></li><li><p>Excellent skills in programming language JAVA, C, C&#43;&#43;</p></li><li><p>Good skills in Object Oriented Programming</p></li><li><p>Communication skills: English is a must, French a plus</p></li><li><p>Teamwork and cross-team collaboration</p></li><li><p>Analytical thinking and Problem solving</p></li><li><p>Drive for excellence</p></li><li><p>Eagerness to learn and develop</p></li></ul><h2><br /><br />Why Join us</h2><h2></h2><p><br /><br />We put our people first, with an attitude of care and a legitimate commitment to their success and wellbeing:<br /><br />Benefit from our competitive compensation and insurance package:</p><ul><li><p>Attractive salary in USD outside of Lebanon</p></li><li><p>International medical, life and travel insurance</p></li><li><p>Retirement plan</p></li><li><p>Schooling allowance</p></li><li><p>And much more</p></li></ul><p>Enjoy a hybrid work environment:</p><ul><li><p>Teleworking at home and abroad</p></li><li><p>Dynamic and supportive work environment focused on employee wellness</p></li></ul><p>Grow with us and gain international exposure:</p><ul><li><p>Extensive learning opportunities</p></li><li><p>Learn from a diverse team of experts around the world</p></li><li><p>Possibility for international and internal mobility</p></li></ul><p><br />Before you start your application, we strongly encourage you to c<b>heck out the learning content in the guide&#39;s<a href=\"https://github.com/murex/Dev-Interview-Preparation#preparation-for-the-murex-dev-hiring-process\" target=\"_blank\"> &#34;Getting Yourself Ready&#34;</a> section. </b>These resources will guide your preparations for the different technical topics that you will be assessed on when you sit for our technical test or meet our experts.</p>",
+  "location": "Beirut",
+  "postedOn": "Posted 18 Days Ago",
+  "startDate": "2026-09-28",
+  "timeType": "Full time",
+  "jobReqId": "JR_SF22936",
+  "jobPostingId": "Software-Engineer--Java-_JR_SF22936",
+  "jobPostingSiteId": "MurexCareerPage1",
+  "country": {
+   "descriptor": "Lebanon",
+   "id": "6dfdb00cf8554fb9aab9f4ef39f830e0"
+  },
+  "logoImage": {
+   "src": "/wday/cxs/murex/MurexCareerPage1/sidebarimage/7b20c72b34771000c435f1f1daf30003",
+   "alt": "Murex Primary color logo"
+  },
+  "canApply": true,
+  "posted": true,
+  "includeResumeParsing": true,
+  "jobRequisitionLocation": {
+   "descriptor": "Beirut",
+   "country": {
+    "descriptor": "Lebanon",
+    "id": "6dfdb00cf8554fb9aab9f4ef39f830e0",
+    "alpha2Code": "LB"
+   }
+  },
+  "externalUrl": "https://murex.wd3.myworkdayjobs.com/MurexCareerPage1/job/Beirut/Software-Engineer--Java-_JR_SF22936"
+ },
+ "hiringOrganization": {
+  "name": "MSYS Murex Systems S.A.L.",
+  "url": ""
+ },
+ "userAuthenticated": false
+}

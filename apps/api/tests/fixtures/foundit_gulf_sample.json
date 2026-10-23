@@ -1,0 +1,175 @@
+{
+ "jobSearchResponse": {
+  "meta": {
+   "paging": {
+    "total": 4
+   }
+  },
+  "data": [
+   {
+    "index": 1,
+    "type": "ad"
+   },
+   {
+    "jobId": 51000001,
+    "title": "Senior Python Developer",
+    "companyName": "Gulf Tech LLC",
+    "locations": "Riyadh, Saudi Arabia",
+    "minimumExperience": {
+     "years": 3
+    },
+    "maximumExperience": {
+     "years": 6
+    },
+    "minimumSalary": {
+     "currency": "AED",
+     "absoluteValue": 14000
+    },
+    "maximumSalary": {
+     "currency": "AED",
+     "absoluteValue": 20000
+    },
+    "createdAt": 1760600000000,
+    "industries": [
+     "Software"
+    ],
+    "functions": [
+     "IT"
+    ],
+    "roles": [
+     "Software Engineer/Programmer"
+    ],
+    "employmentTypes": [
+     "Full time"
+    ],
+    "skills": "Python,Django,AWS",
+    "currencyCode": "AED",
+    "hideSalary": 0,
+    "quickApplyJob": 0,
+    "isJobActive": true,
+    "seoJdUrl": "/job/senior-python-developer-51000001",
+    "exp": "3-6 Years"
+   },
+   {
+    "jobId": 51000002,
+    "title": "Software Engineer",
+    "companyName": "Emirates Digital",
+    "locations": "Dubai, United Arab Emirates",
+    "minimumExperience": {
+     "years": 3
+    },
+    "maximumExperience": {
+     "years": 6
+    },
+    "minimumSalary": {
+     "currency": "AED",
+     "absoluteValue": 18000
+    },
+    "maximumSalary": {
+     "currency": "AED",
+     "absoluteValue": 26000
+    },
+    "createdAt": 1760600000000,
+    "industries": [
+     "Software"
+    ],
+    "functions": [
+     "IT"
+    ],
+    "roles": [
+     "Software Engineer/Programmer"
+    ],
+    "employmentTypes": [
+     "Full time"
+    ],
+    "skills": "Python,Django,AWS",
+    "currencyCode": "AED",
+    "hideSalary": 0,
+    "quickApplyJob": 0,
+    "isJobActive": true,
+    "seoJdUrl": "/job/software-engineer-51000002",
+    "exp": "3-6 Years"
+   },
+   {
+    "jobId": 51000003,
+    "title": "Software Engineer",
+    "companyName": "Chennai Soft",
+    "locations": "Remote, India",
+    "minimumExperience": {
+     "years": 3
+    },
+    "maximumExperience": {
+     "years": 6
+    },
+    "minimumSalary": {
+     "currency": "INR",
+     "absoluteValue": 900000
+    },
+    "maximumSalary": {
+     "currency": "INR",
+     "absoluteValue": 1500000
+    },
+    "createdAt": 1760600000000,
+    "industries": [
+     "Software"
+    ],
+    "functions": [
+     "IT"
+    ],
+    "roles": [
+     "Software Engineer/Programmer"
+    ],
+    "employmentTypes": [
+     "Full time"
+    ],
+    "skills": "Python,Django,AWS",
+    "currencyCode": "INR",
+    "hideSalary": 0,
+    "quickApplyJob": 0,
+    "isJobActive": true,
+    "seoJdUrl": "/job/software-engineer-51000003",
+    "exp": "3-6 Years"
+   },
+   {
+    "jobId": 51000004,
+    "title": "Backend Developer",
+    "companyName": "Pune Labs",
+    "locations": "Pune, India",
+    "minimumExperience": {
+     "years": 3
+    },
+    "maximumExperience": {
+     "years": 6
+    },
+    "minimumSalary": {
+     "currency": "AED",
+     "absoluteValue": 12000
+    },
+    "maximumSalary": {
+     "currency": "AED",
+     "absoluteValue": 16000
+    },
+    "createdAt": 1760600000000,
+    "industries": [
+     "Software"
+    ],
+    "functions": [
+     "IT"
+    ],
+    "roles": [
+     "Software Engineer/Programmer"
+    ],
+    "employmentTypes": [
+     "Full time"
+    ],
+    "skills": "Python,Django,AWS",
+    "currencyCode": "AED",
+    "hideSalary": 0,
+    "quickApplyJob": 0,
+    "isJobActive": true,
+    "seoJdUrl": "/job/backend-developer-51000004",
+    "exp": "3-6 Years"
+   }
+  ]
+ }
+}

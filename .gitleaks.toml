@@ -1,0 +1,14 @@
+title = "Gitleaks Configuration — job-platform"
+
+# Default rules stay fully active for every file: no path is exempt, so a real
+# secret added anywhere (including scrapers and test fixtures) is still caught.
+#
+# Known false positives are handled narrowly instead:
+#   - inline `gitleaks:allow` comments on the exact line (e.g. the public
+#     SmartRecruiters company slug "EtihadAirways5" in scrapers/ats.py, which
+#     lives in a board field named "token" but is a URL identifier, not a secret)
+#
+# Test fixtures must never carry third-party keys: redact them when capturing
+# (see apps/api/tests/fixtures/emploitic_search.html).
+[extend]
+useDefault = true

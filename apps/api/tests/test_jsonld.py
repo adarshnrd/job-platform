@@ -2,7 +2,7 @@
 import json
 
 from models.job import JobType, WorkMode
-from scrapers.jsonld import find_job_posting, parse_job_posting, strip_html
+from scrapers.jsonld import find_job_posting, map_job_posting, parse_job_posting, strip_html
 
 POSTING = {
     "@context": "https://schema.org",
@@ -124,3 +124,69 @@ def test_zero_and_negative_salaries_are_dropped():
 def test_strip_html_unescapes_entities():
     assert strip_html("<p>A&nbsp;&amp;&nbsp;B</p>") == "A & B"
     assert strip_html(None) == ""
+
+
+# ── MENA additions (docs/mena/PHASE_0_FOUNDATIONS.md §0.6) ──
+
+def test_map_job_posting_matches_parse_job_posting():
+    assert map_job_posting(POSTING) == parse_job_posting(_page(POSTING))
+
+
+def test_french_contract_types_map():
+    assert map_job_posting({**POSTING, "employmentType": "CDI"})["job_type"] is JobType.full_time
+    assert map_job_posting({**POSTING, "employmentType": "CDD"})["job_type"] is JobType.contract
+    assert map_job_posting({**POSTING, "employmentType": "STAGE"})["job_type"] is JobType.internship
+    assert map_job_posting({**POSTING, "employmentType": "FREELANCE"})["job_type"] is JobType.freelance
+
+
+def test_space_separated_date_is_parsed():
+    out = map_job_posting({**POSTING, "datePosted": "2026-10-15 14:30:02"})
+    assert (out["posted_at"].year, out["posted_at"].hour, out["posted_at"].second) == (2026, 14, 2)
+
+
+def test_salary_unit_passthrough():
+    posting = {**POSTING, "baseSalary": {
+        "currency": "AED",
+        "value": {"minValue": 10000, "maxValue": 15000, "unitText": "month"},
+    }}
+    out = map_job_posting(posting)
+    assert out["salary_unit"] == "MONTH"
+    assert out["salary_currency"] == "AED"
+    # unitText may also sit on the MonetaryAmount itself.
+    posting["baseSalary"] = {"currency": "AED", "unitText": "YEAR",
+                             "value": {"minValue": 1, "maxValue": 2}}
+    assert map_job_posting(posting)["salary_unit"] == "YEAR"
+    # Absent unit is omitted, not None.
+    assert "salary_unit" not in map_job_posting(POSTING)
+
+
+def test_iso2_country_string_in_address():
+    posting = {**POSTING, "jobLocation": {"address": {
+        "addressLocality": "Casablanca", "addressCountry": "MA"}}}
+    assert map_job_posting(posting)["location"] == "Casablanca, MA"
+
+
+# ── Phase 2 additions (MENA boards) ──
+
+def test_raw_control_characters_in_a_string_are_tolerated():
+    """ReKrute emits literal newlines inside `description`; strict JSON rejects them."""
+    block = (
+        '<script type="application/ld+json">{"@type":"JobPosting","title":"Dev",'
+        '"description":"line one\nline\ttwo"}</script>'
+    )
+    out = parse_job_posting(block)
+    assert out["title"] == "Dev" and "line one" in out["jd_text"]
+
+
+def test_strip_html_decodes_named_and_numeric_entities():
+    assert strip_html("Rattach&eacute;(e) &agrave; l&#39;&eacute;quipe d&rsquo;infra") == "Rattaché(e) à l'équipe d’infra"
+
+
+def test_is_expired():
+    from datetime import datetime
+    from scrapers.jsonld import is_expired
+    now = datetime(2026, 10, 17)
+    assert is_expired({"validThrough": "2026-10-01T00:00:00+03:00"}, now) is True
+    assert is_expired({"validThrough": "2026-12-15 14:30:02"}, now) is False
+    assert is_expired({}, now) is False
+    assert is_expired({"validThrough": "not a date"}, now) is False

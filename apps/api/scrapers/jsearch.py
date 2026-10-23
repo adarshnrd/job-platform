@@ -8,12 +8,14 @@ from loguru import logger
 from scrapers.api_base import APIBaseScraper
 from models.job import JobListingCreate, Platform
 from config import settings
+from scrapers.mena_common import currency_from, with_country
+from services.geo import mena
 
 
 class JSearchScraper(APIBaseScraper):
     platform = Platform.jsearch
     requires_key = True
-    regions = {"india", "global"}
+    regions = {"india", "global", "mena"}
     rate_limit_per_minute = 15
     BASE_URL = "https://jsearch.p.rapidapi.com/search"
 
@@ -27,7 +29,12 @@ class JSearchScraper(APIBaseScraper):
             logger.info("JSearch skipped — JSEARCH_RAPIDAPI_KEY not set")
             return jobs
 
-        country = "in" if region == "india" else "us"
+        # mena: JSearch's `country` filter with MENA ISO-2 codes is unverified;
+        # default to the UAE when the location names no MENA country.
+        if region == "mena":
+            country = (mena.country_of(location) or "AE").lower()
+        else:
+            country = "in" if region == "india" else "us"
         full_query = f"{query} in {location}" if location else query
 
         headers = {
@@ -49,6 +56,15 @@ class JSearchScraper(APIBaseScraper):
 
             loc_parts = [item.get("job_city"), item.get("job_state"), item.get("job_country")]
             loc = ", ".join(p for p in loc_parts if p)
+            extra = {}
+            if region == "mena":
+                iso = mena.country_of(item.get("job_country")) or mena.country_of(loc) or country.upper()
+                if iso in mena.MENA_COUNTRIES:
+                    loc = with_country(", ".join(p for p in loc_parts[:2] if p), iso)
+                extra["salary_currency"] = (
+                    item.get("job_salary_currency") if item.get("job_min_salary") and item.get("job_salary_currency")
+                    else currency_from(loc, location)
+                )
 
             jobs.append(JobListingCreate(
                 title=item.get("job_title", "Role"),
@@ -66,6 +82,7 @@ class JSearchScraper(APIBaseScraper):
                 apply_url=url,
                 source_job_id=str(item.get("job_id", "")),
                 posted_at=self.parse_posted_at(item.get("job_posted_at_datetime_utc")),
+                **extra,
             ))
             if len(jobs) >= max_results:
                 break

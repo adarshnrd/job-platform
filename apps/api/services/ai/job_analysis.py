@@ -29,7 +29,7 @@ def _build_jd_parse_prompt(jd_text: str) -> str:
   "max_experience": integer_or_null,
   "salary_min": integer_or_null,
   "salary_max": integer_or_null,
-  "salary_currency": "INR|USD|GBP|EUR",
+  "salary_currency": "INR|USD|GBP|EUR|AED|SAR|QAR|KWD|BHD|OMR|EGP|JOD|MAD|TND|DZD",
   "required_skills": ["skill1", "skill2"],
   "nice_to_have_skills": ["skill1", "skill2"],
   "responsibilities": ["item1", "item2"],
@@ -41,6 +41,7 @@ def _build_jd_parse_prompt(jd_text: str) -> str:
   "hiring_manager": "name or null",
   "key_technologies": ["tech1", "tech2"]
 }}
+Report salaries as annual amounts; if the JD states a monthly figure multiply by 12.
 
 Job Description:
 {jd_text[:8000]}"""

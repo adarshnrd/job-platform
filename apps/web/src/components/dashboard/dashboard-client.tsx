@@ -10,7 +10,7 @@ import toast from "react-hot-toast";
 import { SessionBanner } from "./session-banner";
 import { PendingQuestionsBanner } from "./pending-questions-banner";
 
-type Region = "india" | "global";
+type Region = "india" | "global" | "mena";
 
 export function DashboardClient({ user }: { user: any }) {
   const [pipeline, setPipeline] = useState<KanbanColumn[]>([]);
@@ -46,7 +46,9 @@ export function DashboardClient({ user }: { user: any }) {
             ? "Discovery is already running."
             : region === "india"
               ? "Searching the Indian job market."
-              : "Searching globally."}{" "}
+              : region === "mena"
+                ? "Searching the Middle East & North Africa."
+                : "Searching globally."}{" "}
           <a href="/activity" className="underline font-semibold whitespace-nowrap">Watch live →</a>
         </span>,
         { duration: 6000 }
@@ -124,6 +126,16 @@ export function DashboardClient({ user }: { user: any }) {
             >
               <Globe size={13} />
               Global
+            </button>
+            <button
+              onClick={() => setRegion("mena")}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                region === "mena" ? "bg-amber-500 text-black" : "text-zinc-400 hover:text-zinc-100"
+              }`}
+              title="Search the Middle East & North Africa"
+            >
+              <Globe size={13} />
+              MENA
             </button>
           </div>
 

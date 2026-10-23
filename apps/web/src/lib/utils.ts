@@ -8,7 +8,12 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatSalary(min?: number, max?: number, currency = "INR"): string {
   if (!min && !max) return "Salary not disclosed";
-  const fmt = (n: number) => currency === "INR" ? `₹${(n / 100000).toFixed(1)}L` : `$${Math.round(n / 1000)}K`;
+  const fmt = (n: number) => {
+    if (currency === "INR") return `₹${(n / 100000).toFixed(1)}L`;
+    const k = `${Math.round(n / 1000)}K`;
+    // USD keeps the "$" sign; other currencies (AED, SAR, EUR...) show their code.
+    return currency === "USD" || !currency ? `$${k}` : `${currency} ${k}`;
+  };
   if (min && max) return `${fmt(min)} – ${fmt(max)}`;
   if (min) return `${fmt(min)}+`;
   return `Up to ${fmt(max!)}`;
@@ -73,6 +78,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   arbeitnow: "Arbeitnow", themuse: "The Muse", adzuna: "Adzuna",
   jooble: "Jooble", jsearch: "JSearch (Google Jobs)", careerjet: "Careerjet",
   jobicy: "Jobicy", himalayas: "Himalayas",
+  sabbar: "Sabbar", emploitic: "Emploitic", keejob: "Keejob", rekrute: "ReKrute",
   company_portal: "Company Portal", other: "Other",
 };
 

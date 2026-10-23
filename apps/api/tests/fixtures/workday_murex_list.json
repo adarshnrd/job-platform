@@ -1,0 +1,89 @@
+{
+ "total": 20,
+ "jobPostings": [
+  {
+   "title": "Software Engineer (Java)",
+   "externalPath": "/job/Beirut/Software-Engineer--Java-_JR_SF22936",
+   "locationsText": "Beirut",
+   "postedOn": "Posted 18 Days Ago",
+   "bulletFields": [
+    "JR_SF22936",
+    "Software Development"
+   ]
+  },
+  {
+   "title": "Technical Analyst",
+   "externalPath": "/job/Beirut/Technical-Analyst_JR_SF22937",
+   "locationsText": "Beirut",
+   "postedOn": "Posted 30+ Days Ago",
+   "bulletFields": [
+    "JR_SF22937",
+    "Consulting​"
+   ]
+  },
+  {
+   "title": "Functional Consultant",
+   "externalPath": "/job/Beirut/Functional-Consultant_JR_SF22939",
+   "locationsText": "Beirut",
+   "postedOn": "Posted 10 Days Ago",
+   "bulletFields": [
+    "JR_SF22939",
+    "Consulting​"
+   ]
+  }
+ ],
+ "facets": [
+  {
+   "facetParameter": "jobFamilyGroup",
+   "descriptor": "Job Category",
+   "values": [
+    {
+     "descriptor": "Functional and Technical Services",
+     "id": "7b20c72b34771000c4278cd15d110001",
+     "count": 5
+    },
+    {
+     "descriptor": "Information Technology",
+     "id": "7b20c72b34771000c4278d6b0e690002",
+     "count": 4
+    },
+    {
+     "descriptor": "Software Development",
+     "id": "7b20c72b34771000c4278f385ebc0002",
+     "count": 3
+    },
+    {
+     "descriptor": "Software Engineering",
+     "id": "7b20c72b34771000c4278fd2412c0001",
+     "count": 2
+    },
+    {
+     "descriptor": "Dev Ops",
+     "id": "7b20c72b34771000c4278c379cbc0002",
+     "count": 2
+    },
+    {
+     "descriptor": "Internship",
+     "id": "7b20c72b34771000c42798d508690001",
+     "count": 1
+    },
+    {
+     "descriptor": "Testing",
+     "id": "7b20c72b34771000c427983b05c70001",
+     "count": 1
+    },
+    {
+     "descriptor": "Technical Services",
+     "id": "7b20c72b34771000c42797a16e7c0000",
+     "count": 1
+    },
+    {
+     "descriptor": "Corporate Services",
+     "id": "7b20c72b34771000c4278c379cbc0000",
+     "count": 1
+    }
+   ]
+  }
+ ],
+ "userAuthenticated": false
+}

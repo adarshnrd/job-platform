@@ -15,7 +15,7 @@ precision gate. Disable with DISCOVERY_PREFILTER_ENABLED=false.
 """
 import re
 
-from loguru import logger
+from services.geo import mena
 
 # Generic technical-role vocabulary. A hit in the *title* keeps the job even if
 # the user's exact skills aren't mentioned (short JDs, reworded titles).
@@ -27,8 +27,20 @@ TECH_ROLE_WORDS = {
     "platform", "cloud", "infrastructure", "systems", "web", "mobile", "android",
     "ios", "api", "database", "security", "blockchain", "technical", "tech lead",
     "cto", "vp engineering", "staff engineer", "principal engineer",
+    # French (Maghreb/Levant boards). Substring match, so the accented forms
+    # are covered by their unaccented siblings where listed both ways.
+    "développeur", "developpeur", "ingénieur logiciel", "ingenieur logiciel",
+    "informatique", "logiciel", "programmeur", "données", "cybersécurité",
+    # Arabic. Bare "ingénieur"/"مهندس" (engineer) are deliberately omitted:
+    # Gulf boards are dominated by civil/construction engineers, and a user's
+    # own skills still match the JD, so recall stays fine.
+    "مطور", "مبرمج", "مهندس برمجيات", "برمجة", "تقنية المعلومات", "تطوير",
+    "أمن المعلومات", "علم البيانات",
 }
 
+# Haystack tokenizer: keeps "." "+" "#" "-" inside a token so skills such as
+# "node.js", "c++" and "ci-cd" match whole, and allows 2-letter tokens ("ai", "ml").
+# The ATS query tokenizer (scrapers.ats) has different needs, see _STOPWORDS there.
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9.+#-]*")
 _STOPWORDS = {
     "the", "and", "for", "with", "job", "jobs", "role", "roles", "at", "in",
@@ -107,16 +119,14 @@ def is_relevant(job, user_keywords: set[str]) -> bool:
     return False
 
 
-def prefilter_jobs(jobs: list, user: dict) -> tuple[list, int]:
-    """Return (kept_jobs, dropped_count). Order preserved."""
-    keywords = build_user_keywords(user)
-    if not keywords:
-        return jobs, 0
-    kept = [j for j in jobs if is_relevant(j, keywords)]
-    dropped = len(jobs) - len(kept)
-    if dropped:
-        logger.info(f"Prefilter: dropped {dropped}/{len(jobs)} off-profile jobs before LLM scoring")
-    return kept, dropped
+def _nationals_blocked(job) -> bool:
+    """Posting reserved for citizens (Emiratisation/Saudisation) — unusable for
+    most applicants. Toggle: MENA_EXCLUDE_NATIONALS_ONLY. Settings are imported
+    lazily so tests can monkeypatch them."""
+    from config import settings
+    if not settings.MENA_EXCLUDE_NATIONALS_ONLY:
+        return False
+    return mena.nationals_only(getattr(job, "title", None), getattr(job, "jd_text", None))
 
 
 def rejected_indices(jobs: list, user: dict) -> set[int]:
@@ -127,6 +137,10 @@ def rejected_indices(jobs: list, user: dict) -> set[int]:
     costing another multi-hour scrape — hence indices rather than a filtered list.
     """
     keywords = build_user_keywords(user)
-    if not keywords:
-        return set()
-    return {i for i, job in enumerate(jobs) if not is_relevant(job, keywords)}
+    out: set[int] = set()
+    for i, job in enumerate(jobs):
+        # The keyword gate is skipped for users with no skills, but the
+        # nationals-only check applies to everyone.
+        if (keywords and not is_relevant(job, keywords)) or _nationals_blocked(job):
+            out.add(i)
+    return out

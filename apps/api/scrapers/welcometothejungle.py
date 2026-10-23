@@ -256,6 +256,7 @@ class WelcomeToTheJungleScraper(BaseScraper):
             return None
 
         company = posting.pop("company", None) or self._company_from_url(url)
+        posting.pop("salary_unit", None)  # not a JobListingCreate field
         # Only trust salary when the posting labelled its currency — an
         # unlabelled number on a multi-country board is worse than none.
         if not posting.get("salary_currency"):
