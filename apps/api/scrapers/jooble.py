@@ -8,12 +8,13 @@ from loguru import logger
 from scrapers.api_base import APIBaseScraper
 from models.job import JobListingCreate, Platform
 from config import settings
+from scrapers.mena_common import currency_from
 
 
 class JoobleScraper(APIBaseScraper):
     platform = Platform.jooble
     requires_key = True
-    regions = {"india", "global"}
+    regions = {"india", "global", "mena"}
     rate_limit_per_minute = 20
     BASE_URL = "https://jooble.org/api"
 
@@ -27,6 +28,8 @@ class JoobleScraper(APIBaseScraper):
             logger.info("Jooble skipped — JOOBLE_API_KEY not set")
             return jobs
 
+        # mena: a country or city name goes straight through; the API geocodes
+        # free text (regional subdomains are irrelevant to it).
         where = location or ("India" if region == "india" else "")
         data = await self._post_json(
             f"{self.BASE_URL}/{settings.JOOBLE_API_KEY}",
@@ -55,6 +58,7 @@ class JoobleScraper(APIBaseScraper):
                 apply_url=url,
                 source_job_id=str(item.get("id", "")),
                 posted_at=self.parse_posted_at(item.get("updated")),
+                **({"salary_currency": currency_from(item.get("location"), where)} if region == "mena" else {}),
             ))
             if len(jobs) >= max_results:
                 break

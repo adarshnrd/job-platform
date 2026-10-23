@@ -1,0 +1,67 @@
+{
+ "meta": {
+  "totalCount": 63
+ },
+ "result": [
+  {
+   "id": "59",
+   "jobOpeningName": "Senior Product Designer ",
+   "departmentId": "18707",
+   "departmentLabel": "Basecamp - Engineering",
+   "employmentStatusLabel": "Full-Time",
+   "employmentType": null,
+   "location": {
+    "city": "Metn",
+    "state": "Metn"
+   },
+   "atsLocation": {
+    "country": null,
+    "state": null,
+    "province": null,
+    "city": null
+   },
+   "isRemote": null,
+   "locationType": "0"
+  },
+  {
+   "id": "65",
+   "jobOpeningName": "Product Manager ",
+   "departmentId": "18707",
+   "departmentLabel": "Basecamp - Engineering",
+   "employmentStatusLabel": "Full-Time",
+   "employmentType": null,
+   "location": {
+    "city": "Metn",
+    "state": "Metn"
+   },
+   "atsLocation": {
+    "country": null,
+    "state": null,
+    "province": null,
+    "city": null
+   },
+   "isRemote": null,
+   "locationType": "0"
+  },
+  {
+   "id": "565",
+   "jobOpeningName": "Staff Backend Engineer ",
+   "departmentId": "18707",
+   "departmentLabel": "Basecamp - Engineering",
+   "employmentStatusLabel": "Full-Time",
+   "employmentType": null,
+   "location": {
+    "city": "Metn",
+    "state": "Metn"
+   },
+   "atsLocation": {
+    "country": null,
+    "state": null,
+    "province": null,
+    "city": null
+   },
+   "isRemote": null,
+   "locationType": "2"
+  }
+ ]
+}

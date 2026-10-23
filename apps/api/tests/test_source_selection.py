@@ -194,3 +194,52 @@ def test_offset_rotates_through_the_matrix():
 def test_pairs_empty_inputs():
     assert build_search_pairs([], ["Bangalore"], cap=6) == []
     assert build_search_pairs(["q"], [], cap=6) == []
+
+
+# ══════════════════════════════════════════════════════════════
+#  MENA REGION (docs/mena/PHASE_0_FOUNDATIONS.md §0.3)
+# ══════════════════════════════════════════════════════════════
+
+def test_infer_region_mena():
+    assert infer_region(["Dubai"]) == "mena"
+    assert infer_region(["Riyadh", "Cairo"]) == "mena"
+    # India stays first: mixed profiles keep today's behaviour.
+    assert infer_region(["Dubai", "Bangalore"]) == "india"
+    assert infer_region(["London"]) == "global"
+    # Substring traps: "oman" inside "romania" must not imply MENA.
+    assert infer_region(["Romania"]) == "global"
+
+
+def test_resolve_region_accepts_mena_override():
+    assert resolve_region(
+        {"preferred_locations": ["Pune"], "discovery_region": "mena"}
+    ) == "mena"
+
+
+def test_mena_selects_linkedin_and_no_india_only_sources():
+    names = {s.name for s in select_sources("mena", [])}
+    assert "linkedin" in names
+    for india_only in ("naukri", "shine", "timesjobs", "hirist", "iimjobs"):
+        assert india_only not in names
+    # Phase 1: the ATS aggregator has a MENA board set and region filter.
+    assert "ats" in names
+
+
+def test_search_locations_per_region():
+    from config import settings
+    from workers.job_discovery import search_locations
+
+    assert search_locations("mena", ["Bangalore"]) == list(settings.MENA_DEFAULT_LOCATIONS)
+    assert search_locations("mena", ["Dubai", "Pune"]) == ["Dubai"]
+    assert search_locations("mena", None) == list(settings.MENA_DEFAULT_LOCATIONS)
+    # india/global behaviour is unchanged.
+    assert search_locations("india", []) == ["India"]
+    assert search_locations("global", ["Berlin", "Pune"]) == ["Berlin", "Pune"]
+
+
+def test_discovery_request_region_validation():
+    from models.job import DiscoveryRequest
+
+    assert DiscoveryRequest(region="mena").region == "mena"
+    assert DiscoveryRequest(region="mars").region == "india"
+    assert DiscoveryRequest().region is None

@@ -28,6 +28,8 @@ from loguru import logger
 from models.job import JobListingCreate, JobType, Platform, WorkMode
 from scrapers.api_base import APIBaseScraper
 from scrapers.jsonld import parse_job_posting
+from config import settings
+from services.geo import mena
 
 # region → (domain, default location label, currency). India first: it is this
 # deployment's home market and the only one with `india` region coverage.
@@ -36,6 +38,11 @@ COUNTRY_SITES: dict[str, tuple[str, str, str]] = {
     "singapore": ("www.foundit.sg", "Singapore", "SGD"),
     "indonesia": ("www.foundit.id", "Indonesia", "IDR"),
     "hongkong":  ("www.foundit.hk", "Hong Kong", "HKD"),
+    # Gulf deployment (same API; docs/mena/PHASE_2_REGIONAL_BOARDS.md §2.1). Only
+    # used when settings.MENA_FOUNDIT_GULF_ENABLED is on: founditgulf's
+    # robots.txt disallows /middleware/ (as foundit.in's does), so it is an
+    # owner decision rather than a default.
+    "gulf":      ("www.founditgulf.com", "United Arab Emirates", "AED"),
 }
 
 # Locations that should route to a non-India Foundit deployment.
@@ -55,7 +62,7 @@ _EMPLOYMENT_TYPES: dict[str, JobType] = {
 class FounditScraper(APIBaseScraper):
     platform = Platform.foundit
     requires_key = False
-    regions = {"india", "global"}
+    regions = {"india", "global", "mena"}
     rate_limit_per_minute = 20
 
     PAGE_SIZE = 50           # the API returns ~50 real listings per page
@@ -74,7 +81,14 @@ class FounditScraper(APIBaseScraper):
 
     @staticmethod
     def _site_for(location: str, region: str) -> tuple[str, str, str]:
-        """Pick the country deployment for a search. Falls back to India."""
+        """Pick the country deployment for a search. Falls back to India.
+
+        The Gulf site is chosen for mena runs and for MENA cities, but only
+        while the owner flag is on; with it off nothing here changes for
+        india/global runs.
+        """
+        if settings.MENA_FOUNDIT_GULF_ENABLED and (region == "mena" or mena.is_mena(location)):
+            return COUNTRY_SITES["gulf"]
         low = (location or "").lower()
         for needles, key in _LOCATION_ROUTES:
             if any(n in low for n in needles):
@@ -93,7 +107,11 @@ class FounditScraper(APIBaseScraper):
         credentials: Optional[dict] = None,
         region: str = "india",
     ) -> list[JobListingCreate]:
+        if region == "mena" and not settings.MENA_FOUNDIT_GULF_ENABLED:
+            logger.info("Foundit: MENA skipped — MENA_FOUNDIT_GULF_ENABLED is off")
+            return []
         domain, default_location, currency = self._site_for(location, region)
+        gulf = domain == COUNTRY_SITES["gulf"][0]
         jobs: list[JobListingCreate] = []
 
         for page in range(self.MAX_PAGES):
@@ -106,7 +124,10 @@ class FounditScraper(APIBaseScraper):
                     "sort": 1,                    # 1 = most recent
                     "limit": self.PAGE_SIZE,
                     "query": query,
-                    "locations": location or "",
+                    # The Gulf API ignores city/country here (verified 2026-10-17:
+                    # "Dubai" returned Remote-India jobs), so Gulf results are
+                    # filtered client-side below instead.
+                    "locations": "" if gulf else (location or ""),
                 },
                 headers={"Referer": f"https://{domain}/"},
             )
@@ -117,6 +138,9 @@ class FounditScraper(APIBaseScraper):
             listings = [i for i in items if isinstance(i, dict) and i.get("jobId")]
             if not listings:
                 break
+
+            if gulf:
+                listings = self._gulf_filter(listings, location)
 
             for item in listings:
                 job = self._to_listing(item, domain, default_location, currency)
@@ -132,6 +156,34 @@ class FounditScraper(APIBaseScraper):
         await self._enrich_descriptions(jobs)
         logger.info(f"Foundit: returning {len(jobs)} jobs for '{query}' ({domain})")
         return jobs
+
+    # ── Gulf filtering ──
+    @staticmethod
+    def _gulf_filter(items: list[dict], location: str) -> list[dict]:
+        """Keep Gulf-site items that really are in the MENA region (and, for a
+        country/city search, in that country); drop cross-posted Indian roles."""
+        keep = []
+        for item in items:
+            place = str(item.get("locations") or "")
+            if item.get("currencyCode") == "INR" or "india" in place.lower():
+                continue
+            if not mena.is_mena(place):
+                continue
+            if mena.is_mena(location) and not mena.same_country(place, location):
+                continue
+            keep.append(item)
+        return keep
+
+    @staticmethod
+    def _gulf_currency(item: dict, location: str, shown_salary: bool) -> Optional[str]:
+        """Gulf deployment labels every salary AED, even a Riyadh job's, so the
+        country's own currency wins outside the UAE."""
+        iso = mena.country_of(location)
+        if iso and iso != "AE":
+            return mena.MENA_COUNTRIES[iso]["currency"]
+        if shown_salary and item.get("currencyCode"):
+            return item["currencyCode"]
+        return mena.currency_for(location)
 
     # ── mapping ──
     def _to_listing(
@@ -174,7 +226,10 @@ class FounditScraper(APIBaseScraper):
             max_experience=max_exp,
             salary_min=salary_min,
             salary_max=salary_max,
-            salary_currency=item.get("currencyCode") or currency,
+            salary_currency=(
+                self._gulf_currency(item, location, salary_min is not None or salary_max is not None)
+                if domain == COUNTRY_SITES["gulf"][0] else None
+            ) or item.get("currencyCode") or currency,
             required_skills=self._skills(item),
             jd_text=self._synthesize_jd(item, location),
             source_platform=self.platform,

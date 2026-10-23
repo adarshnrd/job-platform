@@ -6,16 +6,17 @@ import re
 from loguru import logger
 from scrapers.api_base import APIBaseScraper
 from models.job import JobListingCreate, Platform
+from services.geo import mena
 
 
 class RemotiveScraper(APIBaseScraper):
     platform = Platform.remotive
     requires_key = False
-    regions = {"global", "remote", "india"}  # remote roles are open to India too
+    regions = {"global", "remote", "india", "mena"}  # remote roles are open to India/MENA too
     rate_limit_per_minute = 10
     API_URL = "https://remotive.com/api/remote-jobs"
 
-    async def search_jobs(self, query: str, location: str = "", max_results: int = 50, credentials=None) -> list[JobListingCreate]:
+    async def search_jobs(self, query: str, location: str = "", max_results: int = 50, credentials=None, region: str = "global") -> list[JobListingCreate]:
         jobs: list[JobListingCreate] = []
         data = await self._get_json(self.API_URL, params={"search": query, "limit": max_results})
         if not data:
@@ -24,6 +25,8 @@ class RemotiveScraper(APIBaseScraper):
         for item in data.get("jobs", []):
             url = item.get("url") or ""
             if not self._is_new(url):
+                continue
+            if region == "mena" and not mena.remote_ok_for_mena(item.get("candidate_required_location") or ""):
                 continue
 
             jd_html = item.get("description") or ""
@@ -38,6 +41,7 @@ class RemotiveScraper(APIBaseScraper):
                 is_remote_friendly=True,
                 salary_min=None,
                 salary_max=None,
+                salary_currency="USD",  # Remotive quotes USD; the model default is INR
                 jd_text=jd_text or item.get("title", ""),
                 jd_html=jd_html,
                 required_skills=list(item.get("tags") or [])[:15],

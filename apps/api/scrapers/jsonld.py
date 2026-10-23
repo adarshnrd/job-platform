@@ -8,10 +8,12 @@ routinely break selector-based scrapers — so prefer it whenever a board
 publishes it (verified present on Welcome to the Jungle, 2026-07-27).
 
 `parse_job_posting` returns a plain dict of the fields the job model cares
-about; callers map it onto JobListingCreate.
+about; callers map it onto JobListingCreate. `map_job_posting` does the same
+for an already-parsed JobPosting dict (e.g. Teamtailor's JSON feed).
 """
 from __future__ import annotations
 
+import html as _html
 import json
 import re
 from datetime import datetime
@@ -32,15 +34,25 @@ _EMPLOYMENT_TYPES: dict[str, JobType] = {
     "CONTRACTOR": JobType.contract, "CONTRACT": JobType.contract,
     "TEMPORARY": JobType.contract, "INTERN": JobType.internship,
     "INTERNSHIP": JobType.internship, "OTHER": JobType.full_time,
+    # French boards (ReKrute sends "CDI").
+    "CDI": JobType.full_time, "CDD": JobType.contract,
+    "STAGE": JobType.internship, "FREELANCE": JobType.freelance,
 }
 
 
 def iter_ld_blocks(html: str):
     """Yield every parsed ld+json object on the page, flattening @graph lists."""
     for raw in _LD_BLOCK.findall(html or ""):
-        try:
-            data = json.loads(raw.strip())
-        except Exception:
+        data = None
+        # strict=False admits raw newlines/tabs inside strings, which some boards
+        # (ReKrute) emit in `description`; strict parsing would drop the block.
+        for strict in (True, False):
+            try:
+                data = json.loads(raw.strip(), strict=strict)
+                break
+            except Exception:
+                continue
+        if data is None:
             continue
         candidates = data if isinstance(data, list) else [data]
         for item in candidates:
@@ -67,12 +79,7 @@ def strip_html(value: Any) -> str:
     """JobPosting.description is HTML-in-a-JSON-string on most boards."""
     if not value:
         return ""
-    text = _HTML_TAG.sub(" ", str(value))
-    text = (
-        text.replace("&nbsp;", " ").replace("&amp;", "&")
-        .replace("&lt;", "<").replace("&gt;", ">").replace("&#39;", "'")
-        .replace("&quot;", '"')
-    )
+    text = _html.unescape(_HTML_TAG.sub(" ", str(value)))
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -80,9 +87,21 @@ def _parse_date(value: Any) -> Optional[datetime]:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
+        text = str(value).strip().replace("Z", "+00:00")
+        # "2026-10-15 14:30:02" (ReKrute): normalize the space separator to "T"
+        # so every Python version (venv is 3.10) parses it the same way.
+        if "T" not in text and " " in text:
+            text = text.replace(" ", "T", 1)
+        return datetime.fromisoformat(text).replace(tzinfo=None)
     except Exception:
         return None
+
+
+def is_expired(posting: dict, now: Optional[datetime] = None) -> bool:
+    """True when the posting's `validThrough` lies in the past (timezone ignored,
+    like every other date here). Missing/unparseable dates count as not expired."""
+    until = _parse_date(posting.get("validThrough"))
+    return until is not None and until < (now or datetime.utcnow())
 
 
 def _first(value: Any) -> Any:
@@ -108,16 +127,19 @@ def _location_str(posting: dict) -> str:
     return ", ".join(str(p) for p in parts if p)
 
 
-def _salary(posting: dict) -> tuple[Optional[int], Optional[int], Optional[str]]:
+def _salary(posting: dict) -> tuple[Optional[int], Optional[int], Optional[str], Optional[str]]:
+    """(min, max, currency, unitText). unitText (HOUR/MONTH/YEAR...) lets callers
+    annualize via services.geo.mena.annualize."""
     base = posting.get("baseSalary")
     if not isinstance(base, dict):
-        return None, None, None
+        return None, None, None, None
     currency = base.get("currency") or base.get("salaryCurrency")
     value = base.get("value")
     if isinstance(value, list):
         value = value[0] if value else None
+    unit = (value.get("unitText") if isinstance(value, dict) else None) or base.get("unitText")
     if not isinstance(value, dict):
-        return None, None, currency
+        return None, None, currency, unit
 
     def _as_int(v):
         try:
@@ -131,22 +153,20 @@ def _salary(posting: dict) -> tuple[Optional[int], Optional[int], Optional[str]]
     if lo is None and hi is None:
         exact = _as_int(value.get("value"))
         lo = hi = exact
-    return lo, hi, currency
+    return lo, hi, currency, unit
 
 
-def parse_job_posting(html: str) -> Optional[dict]:
-    """Extract a JobPosting into job-model field names, or None if absent.
+def map_job_posting(posting: dict) -> dict:
+    """Map an already-parsed schema.org JobPosting dict to job-model fields.
 
     Only fields the posting actually carries are returned, so callers can
     `dict.update()` over their own defaults without clobbering them with None.
+    `salary_unit` is extra (not a job-model field): callers annualize with it,
+    then pop it before building JobListingCreate.
     """
-    posting = find_job_posting(html)
-    if not posting:
-        return None
-
     org = posting.get("hiringOrganization")
     org = org if isinstance(org, dict) else {}
-    salary_min, salary_max, currency = _salary(posting)
+    salary_min, salary_max, currency, salary_unit = _salary(posting)
 
     employment = posting.get("employmentType")
     if isinstance(employment, list):
@@ -168,8 +188,16 @@ def parse_job_posting(html: str) -> Optional[dict]:
         "salary_min": salary_min,
         "salary_max": salary_max,
         "salary_currency": currency,
+        "salary_unit": str(salary_unit).upper() if salary_unit else None,
         "job_type": job_type,
         "work_mode": WorkMode.remote if remote else None,
         "is_remote_friendly": remote or None,
     }
     return {k: v for k, v in out.items() if v is not None}
+
+
+def parse_job_posting(html: str) -> Optional[dict]:
+    """Extract a JobPosting from an HTML page into job-model field names, or
+    None if the page carries none."""
+    posting = find_job_posting(html)
+    return map_job_posting(posting) if posting else None

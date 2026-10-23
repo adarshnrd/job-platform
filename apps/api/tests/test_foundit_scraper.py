@@ -141,7 +141,8 @@ def test_site_routing(location, region, expected_domain):
 
 def test_every_registered_country_site_is_well_formed():
     for key, (domain, label, currency) in COUNTRY_SITES.items():
-        assert domain.startswith("www.foundit."), key
+        # "www.founditgulf.com" is the Gulf deployment (docs/mena/ §2.1).
+        assert domain.startswith("www.foundit"), key
         assert label and len(currency) == 3, key
 
 
@@ -158,3 +159,101 @@ def test_placeholder_rows_are_not_listings():
     items = [{"index": 3, "type": "ad"}, _item()]
     listings = [i for i in items if isinstance(i, dict) and i.get("jobId")]
     assert len(listings) == 1
+
+
+# ══════════════════════════════════════════════════════════════
+#  Gulf deployment (docs/mena/PHASE_2_REGIONAL_BOARDS.md §2.1)
+#  foundit_gulf_sample.json mirrors the middleware response shape that
+#  `_to_listing` already maps (2 Gulf items, 2 India cross-posts). It was
+#  hand-trimmed, not captured: founditgulf robots.txt disallows /middleware/.
+# ══════════════════════════════════════════════════════════════
+import json
+from pathlib import Path
+
+import httpx
+
+from config import settings
+from tests.mena_helpers import run_search
+
+_GULF = json.loads(
+    (Path(__file__).parent / "fixtures" / "foundit_gulf_sample.json").read_text(encoding="utf-8")
+)
+_GULF_ITEMS = [i for i in _GULF["jobSearchResponse"]["data"] if i.get("jobId")]
+
+
+@pytest.fixture
+def gulf_on(monkeypatch):
+    monkeypatch.setattr(settings, "MENA_FOUNDIT_GULF_ENABLED", True)
+
+
+def test_flag_is_off_by_default():
+    assert settings.MENA_FOUNDIT_GULF_ENABLED is False
+
+
+def test_gulf_site_is_registered():
+    assert COUNTRY_SITES["gulf"] == ("www.founditgulf.com", "United Arab Emirates", "AED")
+
+
+@pytest.mark.parametrize("location,region", [("Dubai", "mena"), ("Riyadh", "mena"), ("", "mena"), ("Dubai", "global")])
+def test_site_for_mena_is_gulf_when_flag_on(gulf_on, location, region):
+    assert FounditScraper._site_for(location, region)[0] == "www.founditgulf.com"
+
+
+def test_flag_off_leaves_india_and_global_routing_untouched():
+    assert FounditScraper._site_for("Dubai", "global")[0] == "www.foundit.sg"
+    assert FounditScraper._site_for("Bangalore", "india")[0] == "www.foundit.in"
+
+
+def test_india_routing_unchanged_with_flag_on(gulf_on):
+    assert FounditScraper._site_for("Bangalore", "india")[0] == "www.foundit.in"
+    assert FounditScraper._site_for("Singapore", "global")[0] == "www.foundit.sg"
+
+
+def test_mena_search_returns_nothing_and_makes_no_request_when_flag_off():
+    jobs, seen = run_search(FounditScraper, lambda r: httpx.Response(200, json=_GULF),
+                            "software engineer", location="Saudi Arabia", region="mena")
+    assert jobs == [] and seen == []
+
+
+def test_gulf_filter_drops_india_cross_posts_and_other_countries():
+    kept = FounditScraper._gulf_filter(_GULF_ITEMS, "Saudi Arabia")
+    assert [i["jobId"] for i in kept] == [51000001]
+    kept_all = FounditScraper._gulf_filter(_GULF_ITEMS, "")
+    assert [i["jobId"] for i in kept_all] == [51000001, 51000002]
+    assert not any("India" in i["locations"] for i in kept_all)
+    # An India-labelled item is dropped even when its currency is AED.
+    assert 51000004 not in {i["jobId"] for i in kept_all}
+
+
+def test_gulf_currency_follows_the_country_not_the_site_label(scraper):
+    ksa = scraper._to_listing(_GULF_ITEMS[0], "www.founditgulf.com", "United Arab Emirates", "AED")
+    uae = scraper._to_listing(_GULF_ITEMS[1], "www.founditgulf.com", "United Arab Emirates", "AED")
+    assert ksa.salary_currency == "SAR"          # foundit Gulf labels Riyadh pay AED
+    assert uae.salary_currency == "AED"
+    assert ksa.location == "Riyadh, Saudi Arabia"
+
+
+def test_india_item_currency_unchanged(scraper):
+    job = scraper._to_listing(_GULF_ITEMS[2], "www.foundit.in", "India", "INR")
+    assert job.salary_currency == "INR"
+
+
+def test_gulf_search_end_to_end_sends_empty_locations_and_filters(gulf_on):
+    def handler(request):
+        assert request.url.host == "www.founditgulf.com"
+        assert request.url.params["locations"] == ""        # the API ignores it, so it is not sent
+        if request.url.path == "/middleware/jobsearch":
+            return httpx.Response(200, json=_GULF)
+        return httpx.Response(404)                           # detail enrichment fails softly
+    jobs, seen = run_search(FounditScraper, handler, "software engineer",
+                            location="Saudi Arabia", region="mena")
+    assert [j.source_job_id for j in jobs] == ["51000001"]
+    assert jobs[0].salary_currency == "SAR"
+
+
+def test_foundit_is_registered_for_mena():
+    from workers.job_discovery import SOURCE_REGISTRY
+    from services.portals import PORTALS
+    assert "mena" in SOURCE_REGISTRY["foundit"].regions
+    assert "mena" in FounditScraper.regions
+    assert "mena" in PORTALS["foundit"].regions

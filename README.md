@@ -64,6 +64,8 @@ cp .env.example .env     # then fill in the values (see "Environment Variables")
    database/07_discovery_prefs.sql   ← per-user discovery toggle
    database/15_global_sources.sql    ← global sources + users.discovery_region
    database/16_pipeline_durability.sql ← crash-safe discovery pipeline
+   database/17_mena_region.sql       ← 'mena' discovery region + Unicode dedupe key
+   database/18_mena_sources.sql      ← MENA board enum values (run on its own)
    ```
    > Migrations 08–14 are listed in `database/` and follow the same ordering.
    > Run `15_global_sources.sql` on its own — it uses `ALTER TYPE ... ADD VALUE`,
